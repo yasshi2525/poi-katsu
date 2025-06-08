@@ -1,0 +1,12 @@
+{
+  "extends": "..",
+  "compilerOptions": {
+    "types": [
+      "jest",
+      "node"
+    ]
+  },
+  "include": [
+    "**/*.ts"
+  ]
+}
