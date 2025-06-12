@@ -1,13 +1,23 @@
 # poi-katsu
 
-**typescript-shin-ichiba-ranking-game-sample**はTypeScriptでAkashicのゲームを作る際のサンプルプロジェクトです。
+> [!IMPORTANT]
+> このゲームは現在開発中です。動きますが完成はしてません。
 
-## 利用方法
+ニコ生ゲーム「ポイ活でじゃぶじゃぶ稼ぐ疑似体験ができるゲーム」のソースコードです
+ライセンスの関係から一部の画像と音声が投稿されたゲームと異なります
 
- `typescript-shin-ichiba-ranking-game-sample` を利用するにはNode.jsが必要です。
+ご自身のゲーム開発時の参考になれば幸いです。
+改造はご自由にどうぞ！報告やクレジット表記は不要ですが、もししていただける場合は下記の通りお願いします。
 
-初回のみ、以下のコマンドを実行して、ビルドに必要なパッケージをインストールしてください。
-この作業は `typescript-shin-ichiba-ranking-game-sample` を新しく生成するごとに必要です。
+連絡先: [@yasshi2525](https://x.com/yasshi2525)
+クレジット表記: やっしー (yasshi2525)
+
+本ソースリポジトリを複製・改造したものはGitHub等に自由に公開してもらって構いません。
+一応ライセンスを定義していますが、特に制限はしていません。
+
+## インストール方法
+
+本リポジトリをクローンした後、`akashic-cli`などの必要なツールを使えるようにするため、以下のコマンドを実行してください。
 
 ```sh
 npm install
@@ -15,71 +25,50 @@ npm install
 
 ### ビルド方法
 
-`typescript-shin-ichiba-ranking-game-sample` はTypeScriptで書かれているため、以下のコマンドでJavaScriptファイルに変換する必要があります。
+本ソースコードはTypescripで書かれているため、コードを書き換えた後に以下のコマンドを実行してください。実行しないとゲームに反映されません。
 
 ```sh
 npm run build
 ```
 
-`src` ディレクトリ以下のTypeScriptファイルがコンパイルされ、`script` ディレクトリ以下にJavaScriptファイルが生成されます。
+画像や音声ファイルを追加・変更・削除した場合は以下のコマンドを実行してください。
 
-`npm run build` は自動的に `akashic scan asset script` を実行するので、`game.json` の更新が行われます。
+```sh
+npm run update
+```
 
 ### 動作確認方法
 
 以下のどちらかを実行後、ブラウザで `http://localhost:3000/game/` にアクセスすることでゲームを実行できます。
 
 * `npm start`
-* `npm install -g @akashic/akashic-sandbox` 後、 `akashic-sandbox .`
 
-### テンプレートの使い方
-
-* ゲーム部分を作成する場合は、 `src/main.ts` を編集してください。
-  * 基本的に`src/_bootstrap.ts`を編集する必要はありません。
-* このテンプレートでは `src/main.ts` の `main` 関数の引数`param`に以下の値が新たに付与されています。
-  * `param.sessionParameter`: [セッションパラメーター](https://akashic-games.github.io/guide/ranking.html#session-parameters)
-* ランキングモードに対応したニコニコ新市場コンテンツの作り方の詳細については、[こちら](https://akashic-games.github.io/guide/ranking.html)を参照してください。
-
-### アセットの更新方法
-
-各種アセットを追加したい場合は、それぞれのアセットファイルを以下のディレクトリに格納します。
-
-* 画像アセット: `image`
-* スクリプトアセット: `script`
-* テキストアセット: `text`
-* オーディオアセット: `audio`
-
-これらのアセットを追加・変更したあとに `npm run update` をすると、アセットの変更内容をもとに `game.json` を書き換えることができます。
-
-### npm モジュールの追加・削除
-
-`typescript-shin-ichiba-ranking-game-sample` でnpmモジュールを利用する場合、このディレクトリで `akashic install <package_name>` することで npm モジュールを追加することができます。
-
-また `akashic uninstall <package_name>` すると npm モジュールを削除することができます。
+> [!INFO]
+> マルチプレイモードでの動作確認はまだできません (TODO)
 
 ## エクスポート方法
 
-`typescript-shin-ichiba-ranking-game-sample` をエクスポートするときは以下のコマンドを利用します。
+ニコ生ゲーム投稿用ファイルを出力するときは以下のコマンドを実行してください。`game.zip` という名前のファイルが出力されます。
 
-### htmlファイルのエクスポート
+```sh
+npm run export-zip
+```
 
-`npm run export-html` のコマンドを利用することで `game` ディレクトリにエクスポートすることができます。
-
+`npm run export-html` コマンドを実行すると`game`ディレクトリに単体実行可能なHTMLファイルが出力されます。
 `game/index.html` をブラウザで開くと単体動作させることができます。
 
-### zipファイルのエクスポート
-
-`npm run export-zip` のコマンドを利用することで `game.zip` という名前のzipファイルを出力できます。
-
 ## テスト方法
-
-1. [TSLint](https://github.com/palantir/tslint "TSLint")を使ったLint
-2. [Jest](https://jestjs.io/ "Jest")を使ったテスト
-
-がそれぞれ実行されます。
 
 ```sh
 npm test
 ```
 
-テストコードのサンプルとして `spec/testSpec.js` を用意していますので参考にしてテストコードを記述して下さい。
+## Author
+
+yasshi2525 ([X](https://x.com/yasshi2525))
+
+## License
+
+MIT License
+
+画像、音声ファイルは Creative Commons Attribution 4.0 International (CC-BY-4.0)

@@ -1,5 +1,6 @@
+/** @type {import("@akashic/sandbox-configuration").SandboxConfiguration} */
 module.exports = {
-  "warn": {
-    "es6": false
+  displayOptions: {
+    backgroundColor: "black"
   }
 };

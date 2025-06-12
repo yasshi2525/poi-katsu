@@ -6,11 +6,11 @@ import stylistic from "@stylistic/eslint-plugin";
 
 export default [
   {
-    ignores: ["script/**/*.js", "coverage", "eslint.config.mjs"],
+    ignores: ["script/**/*.js", "coverage", "**/eslint.config.mjs"],
   },
   importPlugin.flatConfigs.recommended,
   {
-    files: ["**/*.ts"],
+    files: ["src/**/*.ts", "spec/**/*.ts"],
     plugins: {
       "@typescript-eslint": typescriptEslint,
       "@stylistic/ts": stylistic,

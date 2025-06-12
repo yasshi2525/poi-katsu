@@ -4,30 +4,6 @@
 	"fps": 60,
 	"main": "./script/_bootstrap.js",
 	"assets": {
-		"player": {
-			"type": "image",
-			"width": 32,
-			"height": 32,
-			"path": "image/player.png"
-		},
-		"shot": {
-			"type": "image",
-			"width": 16,
-			"height": 16,
-			"path": "image/shot.png"
-		},
-		"se": {
-			"type": "audio",
-			"path": "audio/se",
-			"systemId": "sound",
-			"duration": 250,
-			"hint": {
-				"extensions": [
-					".aac",
-					".ogg"
-				]
-			}
-		},
 		"_bootstrap": {
 			"type": "script",
 			"path": "script/_bootstrap.js",
@@ -42,13 +18,20 @@
 			"type": "script",
 			"path": "script/parameterObject.js",
 			"global": true
+		},
+		"checkbox-agreement": {
+			"type": "image",
+			"path": "image/checkbox-agreement.png",
+			"width": 1265,
+			"height": 100
 		}
 	},
 	"environment": {
 		"sandbox-runtime": "3",
 		"nicolive": {
 			"supportedModes": [
-				"ranking"
+				"ranking",
+				"multi_addmission"
 			],
 			"preferredSessionParameters": {
 				"totalTimeLimit": 82

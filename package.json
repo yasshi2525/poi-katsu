@@ -9,15 +9,15 @@
   "scripts": {
     "postinstall": "npm run build",
     "build": "rimraf ./script && tsc && akashic scan asset script",
+    "build:watch": "tsc --watch",
     "update": "akashic scan asset && akashic scan globalScripts",
-    "lint": "eslint . --fix",
+    "lint": "eslint .",
     "start": "akashic sandbox .",
+    "start:watch": "akashic sandbox . --watch",
     "export-zip": "rimraf game.zip && akashic export zip -o game.zip --nicolive",
     "export-html": "rimraf game && akashic export html -o game",
-    "export-git": "export-gitproject",
     "test": "jest"
   },
-  "type": "module",
   "author": "yasshi2525",
   "license": "MIT",
   "devDependencies": {
