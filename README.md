@@ -43,7 +43,7 @@ npm run update
 
 * `npm start`
 
-> [!INFO]
+> [!NOTE]
 > マルチプレイモードでの動作確認はまだできません (TODO)
 
 ## エクスポート方法
