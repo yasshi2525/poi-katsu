@@ -9,13 +9,15 @@
 → [仕様書](specification/index.md)
 
 ご自身のゲーム開発時の参考になれば幸いです。
-改造はご自由にどうぞ！報告やクレジット表記は不要ですが、もししていただける場合は下記の通りお願いします。
+改造、改造ゲームの投稿はご自由にどうぞ！報告やクレジット表示は不要ですが、もししていただける場合は下記の通りお願いします。
 
 連絡先: [@yasshi2525](https://x.com/yasshi2525)
-クレジット表記: やっしー (yasshi2525)
+クレジット表示: やっしー (yasshi2525)
 
 本ソースリポジトリを複製・改造したものはGitHub等に自由に公開してもらって構いません。
-一応ライセンスを定義していますが、特に制限はしていません。
+一応ライセンスを定義していますが、特に制限[^1]はしていません。
+
+[^1]: 制限しない理由は少しでも多くのゲーム制作者のために、敷居を設けずに役立てばと思っているからです。意図的な悪用はご遠慮ください。
 
 ## インストール方法
 
@@ -71,6 +73,5 @@ yasshi2525 ([X](https://x.com/yasshi2525))
 
 ## License
 
-MIT License
-
-画像、音声ファイルは Creative Commons Attribution 4.0 International (CC-BY-4.0)
+- Source code: [MIT License](./LICENSE)
+- Rendered images and audio: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
