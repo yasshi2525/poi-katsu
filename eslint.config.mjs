@@ -1,5 +1,5 @@
 import typescriptEslint from "@typescript-eslint/eslint-plugin";
-import importPlugin from "eslint-plugin-import";
+import importPlugin, { rules } from "eslint-plugin-import";
 import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
 import stylistic from "@stylistic/eslint-plugin";
@@ -10,7 +10,7 @@ export default [
   },
   importPlugin.flatConfigs.recommended,
   {
-    files: ["src/**/*.ts", "spec/**/*.ts"],
+    files: ["src/**/*.ts"],
     plugins: {
       "@typescript-eslint": typescriptEslint,
       "@stylistic/ts": stylistic,
@@ -26,7 +26,7 @@ export default [
       sourceType: "module",
 
       parserOptions: {
-        project: ["tsconfig.json", "spec/tsconfig.json"],
+        project: ["tsconfig.json"],
       },
     },
 
@@ -210,4 +210,26 @@ export default [
       "import/no-unresolved": "off",
     },
   },
+  {
+    files: ["spec/**/*.ts"],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 6,
+      sourceType: "module",
+      parserOptions: {
+        project: ["spec/tsconfig.json",  "spec/e2e/tsconfig.json"],
+      }
+    },
+    ...stylistic.configs.customize({
+      indent: "tab",
+      quotes: "double",
+      semi: true,
+    })
+  },
+  {
+    files: ["spec/**/*.ts"],
+    rules: {
+      "import/no-unresolved": "off",
+    }
+  }
 ];

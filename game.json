@@ -4,9 +4,25 @@
 	"fps": 60,
 	"main": "./script/_bootstrap.js",
 	"assets": {
-		"_bootstrap": {
+		"checkbox-agreement": {
+			"type": "image",
+			"path": "image/checkbox-agreement.png",
+			"width": 1265,
+			"height": 100
+		},
+		"baseScene": {
 			"type": "script",
-			"path": "script/_bootstrap.js",
+			"path": "script/scene/baseScene.js",
+			"global": true
+		},
+		"mainScene": {
+			"type": "script",
+			"path": "script/scene/mainScene.js",
+			"global": true
+		},
+		"titleScene": {
+			"type": "script",
+			"path": "script/scene/titleScene.js",
 			"global": true
 		},
 		"main": {
@@ -14,16 +30,56 @@
 			"path": "script/main.js",
 			"global": true
 		},
-		"parameterObject": {
+		"_bootstrap": {
 			"type": "script",
-			"path": "script/parameterObject.js",
+			"path": "script/_bootstrap.js",
 			"global": true
 		},
-		"checkbox-agreement": {
+		"agreementE": {
+			"type": "script",
+			"path": "script/entity/agreementE.js",
+			"global": true
+		},
+		"buttonE": {
+			"type": "script",
+			"path": "script/entity/buttonE.js",
+			"global": true
+		},
+		"checkBoxE": {
+			"type": "script",
+			"path": "script/entity/checkBoxE.js",
+			"global": true
+		},
+		"labelButtonE": {
+			"type": "script",
+			"path": "script/entity/labelButtonE.js",
+			"global": true
+		},
+		"modalE": {
+			"type": "script",
+			"path": "script/entity/modalE.js",
+			"global": true
+		},
+		"panelE": {
+			"type": "script",
+			"path": "script/entity/panelE.js",
+			"global": true
+		},
+		"spriteButtonE": {
+			"type": "script",
+			"path": "script/entity/spriteButtonE.js",
+			"global": true
+		},
+		"swippableE": {
+			"type": "script",
+			"path": "script/entity/swippableE.js",
+			"global": true
+		},
+		"panel": {
 			"type": "image",
-			"path": "image/checkbox-agreement.png",
-			"width": 1265,
-			"height": 100
+			"path": "image/panel.png",
+			"width": 200,
+			"height": 200
 		}
 	},
 	"environment": {
@@ -31,12 +87,21 @@
 		"nicolive": {
 			"supportedModes": [
 				"ranking",
-				"multi_addmission"
+				"multi_admission"
 			],
 			"preferredSessionParameters": {
-				"totalTimeLimit": 82
+				"totalTimeLimit": 120
 			}
 		}
 	},
-	"globalScripts": []
+	"globalScripts": [
+		"node_modules/@akashic-extension/akashic-timeline/lib/ActionType.js",
+		"node_modules/@akashic-extension/akashic-timeline/lib/Easing.js",
+		"node_modules/@akashic-extension/akashic-timeline/lib/Timeline.js",
+		"node_modules/@akashic-extension/akashic-timeline/lib/Tween.js",
+		"node_modules/@akashic-extension/akashic-timeline/lib/index.js"
+	],
+	"moduleMainScripts": {
+		"@akashic-extension/akashic-timeline": "node_modules/@akashic-extension/akashic-timeline/lib/index.js"
+	}
 }

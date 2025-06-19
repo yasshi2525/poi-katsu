@@ -6,6 +6,15 @@ export default {
   coverageDirectory: "coverage",
   collectCoverageFrom: ["./src/**/*.ts"],
   coverageReporters: ["lcov"],
-  ...createDefaultPreset({ tsconfig: "spec/tsconfig.json" }),
-  testMatch: ["<rootDir>/spec/**/*.ts"],
+  projects: [{
+    displayName:  "unit",
+    ...createDefaultPreset({ tsconfig: "spec/tsconfig.json" }),
+    testMatch: ["<rootDir>/spec/**/*.spec.ts"],
+    testPathIgnorePatterns: ["<rootDir>/spec/e2e"],
+    testEnvironment: "@yasshi2525/jest-environment-akashic"
+  },{
+    displayName: "e2e",
+    ...createDefaultPreset({ tsconfig: "spec/e2e/tsconfig.json" }),
+    testMatch: ["<rootDir>/spec/e2e/**/*.ts"]
+  }]
 };

@@ -11,9 +11,11 @@
     "build": "rimraf ./script && tsc && akashic scan asset script",
     "build:watch": "tsc --watch",
     "update": "akashic scan asset && akashic scan globalScripts",
-    "lint": "eslint .",
+    "lint": "eslint . --fix",
     "start": "akashic sandbox .",
     "start:watch": "akashic sandbox . --watch",
+    "start:multi": "akashic serve",
+    "start:multi:watch": "akashic serve --watch",
     "export-zip": "rimraf game.zip && akashic export zip -o game.zip --nicolive",
     "export-html": "rimraf game && akashic export html -o game",
     "test": "jest"
@@ -28,6 +30,7 @@
     "@types/jest": "^29.1.0",
     "@typescript-eslint/eslint-plugin": "^8.9.0",
     "@typescript-eslint/parser": "^8.9.0",
+    "@yasshi2525/jest-environment-akashic": "^0.1.5",
     "eslint": "^9.12.0",
     "eslint-plugin-import": "^2.31.0",
     "globals": "^16.0.0",
@@ -36,5 +39,8 @@
     "ts-jest": "^29.0.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@akashic-extension/akashic-timeline": "^3.2.1"
   }
 }
