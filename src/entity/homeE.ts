@@ -1,9 +1,23 @@
+import { Timeline } from "@akashic-extension/akashic-timeline";
+import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AppNavigationSectionE } from "./appNavigationSectionE";
 import { BannerSectionE, BannerData } from "./bannerSectionE";
 import { HeaderSectionE } from "./headerSectionE";
+import { ProfileEditorE } from "./profileEditorE";
 import { TaskSectionE, TaskData } from "./taskSectionE";
 import { TimelineSectionE } from "./timelineSectionE";
 
+
+/**
+ * Animation configuration constants
+ */
+const ANIMATION_CONFIG = {
+	SCREEN_SWIPE_DURATION: 500,
+	SCREEN_SWIPE_DISTANCE: 720,
+	ACHIEVEMENT_SLIDE_DURATION: 500,
+	ACHIEVEMENT_DISPLAY_DURATION: 2000,
+	ACHIEVEMENT_POSITION_FROM_RIGHT: 320,
+} as const;
 
 /**
  * Parameter object for Home
@@ -28,6 +42,13 @@ export class HomeE extends g.E {
 	private taskSection!: TaskSectionE;
 	private timelineSection!: TimelineSectionE;
 	private appNavigationSection!: AppNavigationSectionE;
+	private profileEditor?: ProfileEditorE;
+	private scoreBroadcaster?: ScoreBroadcaster;
+
+	// Screen state
+	private readonly screenWidth: number;
+	private readonly screenHeight: number;
+	private isProfileEditorVisible: boolean = false;
 
 	// Task data
 	private readonly tasks: TaskData[] = [
@@ -105,12 +126,16 @@ export class HomeE extends g.E {
 	constructor(options: HomeParameterObject) {
 		super(options);
 
+		this.screenWidth = options.width;
+		this.screenHeight = options.height;
+
 		// Initialize game variables
 		const gameVars = options.scene.game.vars as GameVars;
 		const remainingSec = gameVars.totalTimeLimit;
 		const score = gameVars.gameState.score;
 
 		this.createComponents(options.width, options.height, score, remainingSec);
+		this.initializeScoreBroadcaster(score);
 	}
 
 	/**
@@ -135,6 +160,11 @@ export class HomeE extends g.E {
 
 		// Update header section
 		this.headerSection.setScore(newScore);
+
+		// Broadcast score to other participants
+		if (this.scoreBroadcaster) {
+			this.scoreBroadcaster.broadcastScore(newScore);
+		}
 	}
 
 	/**
@@ -208,6 +238,7 @@ export class HomeE extends g.E {
 			width: width,
 			height: height,
 			tasks: this.tasks,
+			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
 			onTaskComplete: (taskData: TaskData) => this.addScore(taskData.rewardPoints)
 		});
 		this.append(this.taskSection);
@@ -227,6 +258,180 @@ export class HomeE extends g.E {
 			height: height
 		});
 		this.append(this.appNavigationSection);
+	}
+
+	/**
+	 * Initializes the score broadcaster for multi-player score synchronization
+	 */
+	private initializeScoreBroadcaster(initialScore: number): void {
+		this.scoreBroadcaster = new ScoreBroadcaster(this.scene);
+		this.scoreBroadcaster.initializeCurrentPlayerScore(initialScore);
+	}
+
+
+	/**
+	 * Handles task execution when a task execute button is clicked
+	 * @param taskData The task data for the executed task
+	 */
+	private onTaskExecute(taskData: TaskData): void {
+		if (taskData.id === "profile") {
+			this.switchToProfileEditor();
+		} else {
+			// For other tasks, use the default modal behavior
+			// This will be handled by the task section itself
+		}
+	}
+
+	/**
+	 * Switches from HomeE to ProfileEditorE with swipe animation
+	 */
+	private switchToProfileEditor(): void {
+		if (this.isProfileEditorVisible || this.profileEditor) return;
+
+		// Create profile editor positioned off-screen to the right
+		this.profileEditor = new ProfileEditorE({
+			scene: this.scene,
+			width: this.screenWidth,
+			height: this.screenHeight,
+			x: this.screenWidth, // Start off-screen to the right
+			y: 0,
+			onComplete: () => this.switchBackToHome(),
+			onProfileChange: () => this.updateHeaderWithCurrentProfile()
+		});
+		this.append(this.profileEditor);
+
+		this.isProfileEditorVisible = true;
+
+		// Create swipe animation: HomeE slides left, ProfileEditor slides in from right
+		const timeline = new Timeline(this.scene);
+
+		// Animate HomeE sections sliding out to the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x - ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+
+		// Animate ProfileEditor sliding in from the right
+		timeline.create(this.profileEditor)
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+	}
+
+	/**
+	 * Switches back from ProfileEditorE to HomeE with swipe animation
+	 */
+	private switchBackToHome(): void {
+		if (!this.isProfileEditorVisible || !this.profileEditor) return;
+
+		// Create swipe animation: ProfileEditor slides right, HomeE slides in from left
+		const timeline = new Timeline(this.scene);
+
+		// Animate ProfileEditor sliding out to the right
+		timeline.create(this.profileEditor)
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Update header section with current profile data from gameVars
+				this.updateHeaderWithCurrentProfile();
+				// Clean up profile editor after animation
+				if (this.profileEditor) {
+					this.profileEditor.destroy();
+					this.profileEditor = undefined;
+				}
+				this.isProfileEditorVisible = false;
+				// Complete the profile task
+				this.completeProfileTask();
+			});
+
+		// Animate HomeE sections sliding back in from the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x + ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+	}
+
+	/**
+	 * Gets all home screen sections for animation
+	 * @returns Array of home screen sections
+	 */
+	private getHomeSections(): g.E[] {
+		return [
+			this.headerSection,
+			this.bannerSection,
+			this.taskSection,
+			this.timelineSection,
+			this.appNavigationSection
+		];
+	}
+
+	/**
+	 * Updates the header section with current profile data from gameVars
+	 */
+	private updateHeaderWithCurrentProfile(): void {
+		const gameVars = this.scene.game.vars as GameVars;
+		this.headerSection.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
+	}
+
+	/**
+	 * Completes the profile task and shows achievement effect
+	 */
+	private completeProfileTask(): void {
+		const profileTask = this.tasks.find(task => task.id === "profile");
+		if (profileTask && !profileTask.completed) {
+			// Use TaskSectionE's external completion method to handle visual removal
+			this.taskSection.completeTaskExternal("profile");
+			// Show achievement effect for profile completion
+			this.showAchievementEffect(profileTask);
+		}
+	}
+
+	/**
+	 * Shows achievement notification effect
+	 * @param task The completed task
+	 */
+	private showAchievementEffect(task: TaskData): void {
+		// Create achievement notification that slides in from the right
+		const achievementNotification = new g.E({
+			scene: this.scene,
+			x: this.screenWidth, // Start off-screen to the right
+			y: 100,
+		});
+
+		// Background for notification
+		const notificationBg = new g.FilledRect({
+			scene: this.scene,
+			width: 300,
+			height: 60,
+			x: 0,
+			y: 0,
+			cssColor: "#27ae60",
+		});
+		achievementNotification.append(notificationBg);
+
+		// Achievement text
+		const achievementText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 16,
+				fontColor: "white",
+			}),
+			text: `${task.title} 完了！ +${task.rewardPoints}pt`,
+			x: 10,
+			y: 20,
+		});
+		achievementNotification.append(achievementText);
+
+		this.append(achievementNotification);
+
+		// Animate notification: slide in, wait, slide out
+		const timeline = new Timeline(this.scene);
+		timeline.create(achievementNotification)
+			.to({ x: this.screenWidth - ANIMATION_CONFIG.ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION)
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.call(() => {
+				achievementNotification.destroy();
+			});
 	}
 
 	/**

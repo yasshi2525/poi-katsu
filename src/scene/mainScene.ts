@@ -22,6 +22,9 @@ export class MainScene extends BaseScene {
 		});
 		this.remainFrame = (this.game.vars as GameVars).totalTimeLimit * this.game.fps;
 		this.onLoad.add(() => {
+			// Initialize multi-player broadcast handlers immediately to prevent race conditions
+			this.initializeMessageHandlers();
+
 			this.onUpdate.add(() => {
 				if (this.remainFrame > 0) {
 					this.remainFrame--;
@@ -57,6 +60,36 @@ export class MainScene extends BaseScene {
 				anchorY: 0.5
 			}));
 		});
+	}
+
+	/**
+	 * Initializes multi-player message handlers immediately on scene load
+	 * This prevents race conditions where fast players broadcast before slow players are ready
+	 */
+	public initializeMessageHandlers(): void {
+		const gameVars = this.game.vars as GameVars;
+		if (gameVars.mode === "multi") {
+			this.onMessage.add((ev: g.MessageEvent) => {
+				// Handle profile broadcasts
+				if (ev.data?.type === "profileUpdate" && ev.data?.profileData) {
+					const profileData = ev.data.profileData;
+					if (profileData.playerId && profileData.playerId !== this.game.selfId) {
+						gameVars.allPlayersProfiles[profileData.playerId] = {
+							name: profileData.name,
+							avatar: profileData.avatar
+						};
+					}
+				}
+
+				// Handle score broadcasts
+				if (ev.data?.type === "scoreUpdate" && ev.data?.scoreData) {
+					const scoreData = ev.data.scoreData;
+					if (scoreData.playerId && scoreData.playerId !== this.game.selfId) {
+						gameVars.allPlayersScores[scoreData.playerId] = scoreData.score;
+					}
+				}
+			});
+		}
 	}
 
 	protected override onSwipeIn(): void {

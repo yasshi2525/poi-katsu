@@ -43,6 +43,10 @@ export class HeaderSectionE extends g.E {
 	private timePrefixLabel!: g.Label;
 	private timeNumberE!: NumberE;
 
+	// Player profile display components
+	private playerAvatarLabel?: g.Label;
+	private playerNameLabel?: g.Label;
+
 	/**
 	 * Creates a new HeaderSection instance
 	 * @param options Configuration options for the header section
@@ -86,6 +90,15 @@ export class HeaderSectionE extends g.E {
 	}
 
 	/**
+	 * Sets the player profile and displays it in the header
+	 * @param name Player name
+	 * @param avatar Player avatar emoji
+	 */
+	setPlayerProfile(name: string, avatar: string): void {
+		this.createPlayerProfileDisplay(name, avatar);
+	}
+
+	/**
 	 * Creates the layout configuration object
 	 */
 	private createLayoutConfig(screenWidth: number, _screenHeight: number): LayoutConfig {
@@ -113,6 +126,16 @@ export class HeaderSectionE extends g.E {
 					children: {
 						prefix: { x: 0, y: 0, width: 80, height: 16 },
 						number: { x: 80, y: 0, width: 80, height: 16 }
+					}
+				},
+				player: {
+					x: Math.floor(screenWidth / 2) - 75, // Center position
+					y: 15,
+					width: 150,
+					height: 30,
+					children: {
+						avatar: { x: 0, y: 0, width: 30, height: 30 },
+						name: { x: 35, y: 5, width: 115, height: 20 }
 					}
 				}
 			}
@@ -224,5 +247,53 @@ export class HeaderSectionE extends g.E {
 		if (this.timeNumberE) {
 			this.timeNumberE.value = this.remainingSec;
 		}
+	}
+
+	/**
+	 * Creates the player profile display in the center of the header
+	 * @param name Player name
+	 * @param avatar Player avatar emoji
+	 */
+	private createPlayerProfileDisplay(name: string, avatar: string): void {
+		// Remove existing profile display if any
+		if (this.playerAvatarLabel) {
+			this.playerAvatarLabel.destroy();
+		}
+		if (this.playerNameLabel) {
+			this.playerNameLabel.destroy();
+		}
+
+		const playerLayout = this.layout.children!.player;
+		const avatarLayout = playerLayout.children!.avatar;
+		const nameLayout = playerLayout.children!.name;
+
+		// Avatar emoji
+		this.playerAvatarLabel = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 24,
+			}),
+			text: avatar,
+			x: playerLayout.x + avatarLayout.x,
+			y: playerLayout.y + avatarLayout.y,
+		});
+		this.append(this.playerAvatarLabel);
+
+		// Player name
+		this.playerNameLabel = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 16,
+				fontColor: "white",
+			}),
+			text: name,
+			x: playerLayout.x + nameLayout.x,
+			y: playerLayout.y + nameLayout.y,
+		});
+		this.append(this.playerNameLabel);
 	}
 }

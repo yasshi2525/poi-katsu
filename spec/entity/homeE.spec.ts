@@ -1,6 +1,7 @@
 import { HomeE } from "../../src/entity/homeE";
 import { LabelButtonE } from "../../src/entity/labelButtonE";
 import { ModalE } from "../../src/entity/modalE";
+import { ProfileEditorE } from "../../src/entity/profileEditorE";
 
 describe("HomeE", () => {
 	let home: HomeE;
@@ -11,6 +12,8 @@ describe("HomeE", () => {
 		gameVars.mode = "ranking"; // Use ranking mode for synchronous button behavior
 		gameVars.totalTimeLimit = 180;
 		gameVars.gameState = { score: 500 };
+		gameVars.playerProfile = { name: "プレイヤー", avatar: "😀" };
+		gameVars.allPlayersProfiles = {};
 
 		// Create HomeE instance using global scene
 		home = new HomeE({
@@ -46,6 +49,45 @@ describe("HomeE", () => {
 			};
 			// Search within the task section component
 			return findButton(home.getTaskSection());
+		};
+
+		/**
+		 * Helper function to find current ProfileEditorE
+		 */
+		const findCurrentProfileEditor = (): ProfileEditorE | null => {
+			const findProfileEditor = (entity: g.E | g.Scene): ProfileEditorE | null => {
+				if (entity instanceof ProfileEditorE) {
+					return entity;
+				}
+				if (entity.children) {
+					for (const child of entity.children) {
+						const found = findProfileEditor(child);
+						if (found) return found;
+					}
+				}
+				return null;
+			};
+			// Search within the scene and home entity
+			return findProfileEditor(scene) || findProfileEditor(home);
+		};
+
+		/**
+		 * Helper function to find submit button in ProfileEditorE
+		 */
+		const findProfileSubmitButton = (profileEditor: ProfileEditorE): LabelButtonE<any> | null => {
+			const findButton = (entity: g.E): LabelButtonE<any> | null => {
+				if (entity instanceof LabelButtonE && entity.name === "submitProfileButton") {
+					return entity;
+				}
+				if (entity.children) {
+					for (const child of entity.children) {
+						const found = findButton(child);
+						if (found) return found;
+					}
+				}
+				return null;
+			};
+			return findButton(profileEditor);
 		};
 
 		/**
@@ -149,9 +191,32 @@ describe("HomeE", () => {
 		};
 
 		/**
-		 * Helper function to complete a task through the full modal flow
+		 * Helper function to complete a profile task through the screen switching flow
 		 */
-		const completeTask = async (taskId: string): Promise<void> => {
+		const completeProfileTask = async (): Promise<void> => {
+			// Step 1: Click execute button for profile task
+			const executeButton = findTaskExecuteButton("profile");
+			expect(executeButton).not.toBeNull();
+			executeButton!.send();
+
+			// Step 2: Wait for profile editor to appear and swipe animation to complete
+			await gameContext.advance(600); // Wait for swipe animation
+
+			// Step 3: Find and click submit button in ProfileEditorE
+			const profileEditor = findCurrentProfileEditor();
+			expect(profileEditor).not.toBeNull();
+			const submitButton = findProfileSubmitButton(profileEditor!);
+			expect(submitButton).not.toBeNull();
+			submitButton!.send();
+
+			// Step 4: Wait for return animation and task completion
+			await gameContext.advance(1500); // Wait for swipe back (500ms) + task fade out (500ms) + repositioning (300ms) + buffer
+		};
+
+		/**
+		 * Helper function to complete a non-profile task through the modal flow
+		 */
+		const completeModalTask = async (taskId: string): Promise<void> => {
 			// Step 1: Click execute button
 			const executeButton = findTaskExecuteButton(taskId);
 			expect(executeButton).not.toBeNull();
@@ -173,6 +238,18 @@ describe("HomeE", () => {
 
 			// Step 4: Advance game context to complete animations
 			await gameContext.advance(1000); // Advance enough time to complete all animations
+		};
+
+		/**
+		 * Helper function to complete any task (chooses the right flow based on task type)
+		 */
+		const completeTask = async (taskId: string): Promise<void> => {
+			if (taskId === "profile") {
+				await completeProfileTask();
+			}
+			else {
+				await completeModalTask(taskId);
+			}
 		};
 
 		it("should destroy specified task entity when task is completed", async () => {
@@ -296,6 +373,91 @@ describe("HomeE", () => {
 
 			// Verify final score (500 + 50 + 100 + 100 = 750)
 			expect(home.getScore()).toBe(750);
+		});
+
+		it("should handle profile task with screen switching behavior", async () => {
+			// Get initial score
+			const initialScore = home.getScore();
+
+			// Verify initial state - profile task should be visible
+			const profileButton = findTaskExecuteButton("profile");
+			expect(profileButton).not.toBeNull();
+
+			// Click profile task execute button
+			profileButton!.send();
+
+			// Wait for swipe animation to complete
+			await gameContext.advance(600);
+
+			// Verify ProfileEditorE is now visible
+			const profileEditor = findCurrentProfileEditor();
+			expect(profileEditor).not.toBeNull();
+
+			// Verify no modal is shown (different from other tasks)
+			const modal = findCurrentModal();
+			expect(modal).toBeNull();
+
+			// Find and click submit button
+			const submitButton = findProfileSubmitButton(profileEditor!);
+			expect(submitButton).not.toBeNull();
+			submitButton!.send();
+
+			// Wait for return animation and task completion
+			await gameContext.advance(1500);
+
+			// Verify ProfileEditorE is gone
+			expect(findCurrentProfileEditor()).toBeNull();
+
+			// Verify profile task is completed (button should be gone)
+			expect(findTaskExecuteButton("profile")).toBeNull();
+
+			// Verify score increased by 50 points
+			expect(home.getScore()).toBe(initialScore + 50);
+
+			// Verify player profile is stored in game variables
+			const gameVars = home.scene.game.vars as GameVars;
+			expect(gameVars.playerProfile.name).toBe("プレイヤー");
+			expect(gameVars.playerProfile.avatar).toBeDefined();
+		});
+
+		it("should handle non-profile tasks with modal behavior", async () => {
+			// Get initial score
+			const initialScore = home.getScore();
+
+			// Test shopping task (should use modal flow)
+			const shoppingButton = findTaskExecuteButton("shopping");
+			expect(shoppingButton).not.toBeNull();
+
+			// Click shopping task execute button
+			shoppingButton!.send();
+
+			// Verify modal appears (different from profile task)
+			let modal = findCurrentModal();
+			expect(modal).not.toBeNull();
+
+			// Verify no profile editor appears
+			expect(findCurrentProfileEditor()).toBeNull();
+
+			// Complete the modal flow
+			const confirmButton = findModalConfirmButton(modal!);
+			expect(confirmButton).not.toBeNull();
+			confirmButton!.send();
+
+			// Find success modal and OK button
+			modal = findCurrentModal();
+			expect(modal).not.toBeNull();
+			const okButton = findModalOkButton(modal!);
+			expect(okButton).not.toBeNull();
+			okButton!.send();
+
+			// Wait for animations
+			await gameContext.advance(1000);
+
+			// Verify task is completed
+			expect(findTaskExecuteButton("shopping")).toBeNull();
+
+			// Verify score increased by 100 points
+			expect(home.getScore()).toBe(initialScore + 100);
 		});
 	});
 

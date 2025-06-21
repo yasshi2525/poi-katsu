@@ -125,6 +125,21 @@
 			"type": "script",
 			"path": "script/entity/timelineSectionE.js",
 			"global": true
+		},
+		"profileEditorE": {
+			"type": "script",
+			"path": "script/entity/profileEditorE.js",
+			"global": true
+		},
+		"radioButtonGroupE": {
+			"type": "script",
+			"path": "script/entity/radioButtonGroupE.js",
+			"global": true
+		},
+		"scoreBroadcaster": {
+			"type": "script",
+			"path": "script/model/scoreBroadcaster.js",
+			"global": true
 		}
 	},
 	"environment": {
@@ -137,16 +152,26 @@
 			"preferredSessionParameters": {
 				"totalTimeLimit": 120
 			}
+		},
+		"external": {
+			"coeLimited": "0"
 		}
 	},
 	"globalScripts": [
+		"node_modules/@akashic-extension/akashic-hover-plugin/lib/Converter.js",
+		"node_modules/@akashic-extension/akashic-hover-plugin/lib/HoverPlugin.js",
+		"node_modules/@akashic-extension/akashic-hover-plugin/lib/index.js",
 		"node_modules/@akashic-extension/akashic-timeline/lib/ActionType.js",
 		"node_modules/@akashic-extension/akashic-timeline/lib/Easing.js",
 		"node_modules/@akashic-extension/akashic-timeline/lib/Timeline.js",
 		"node_modules/@akashic-extension/akashic-timeline/lib/Tween.js",
-		"node_modules/@akashic-extension/akashic-timeline/lib/index.js"
+		"node_modules/@akashic-extension/akashic-timeline/lib/index.js",
+		"node_modules/@akashic-extension/resolve-player-info/lib/FallbackDialog.js",
+		"node_modules/@akashic-extension/resolve-player-info/lib/index.js"
 	],
 	"moduleMainScripts": {
-		"@akashic-extension/akashic-timeline": "node_modules/@akashic-extension/akashic-timeline/lib/index.js"
+		"@akashic-extension/akashic-timeline": "node_modules/@akashic-extension/akashic-timeline/lib/index.js",
+		"@akashic-extension/akashic-hover-plugin": "node_modules/@akashic-extension/akashic-hover-plugin/lib/index.js",
+		"@akashic-extension/resolve-player-info": "node_modules/@akashic-extension/resolve-player-info/lib/index.js"
 	}
 }

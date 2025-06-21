@@ -54,6 +54,8 @@ export interface TaskSectionParameterObject extends g.EParameterObject {
 	height: number;
 	/** Task data array */
 	tasks: TaskData[];
+	/** Callback when task execution is requested (before modal/confirmation) */
+	onTaskExecute?: (taskData: TaskData) => void;
 	/** Callback when task is executed and points should be awarded */
 	onTaskComplete: (taskData: TaskData) => void;
 }
@@ -66,6 +68,7 @@ export class TaskSectionE extends g.E {
 
 	private readonly tasks: TaskData[];
 	private readonly layout: LayoutConfig;
+	private readonly onTaskExecute?: (taskData: TaskData) => void;
 	private readonly onTaskComplete: (taskData: TaskData) => void;
 	private taskItems: Map<string, TaskItem> = new Map();
 	private currentModal?: ModalE<string>;
@@ -78,6 +81,7 @@ export class TaskSectionE extends g.E {
 		super(options);
 
 		this.tasks = options.tasks;
+		this.onTaskExecute = options.onTaskExecute;
 		this.onTaskComplete = options.onTaskComplete;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 
@@ -99,6 +103,27 @@ export class TaskSectionE extends g.E {
 	 */
 	getVisibleTaskItems(): Map<string, TaskItem> {
 		return new Map(this.taskItems);
+	}
+
+	/**
+	 * Completes a task externally (for tasks that don't use the modal flow)
+	 * @param taskId The ID of the task to complete
+	 */
+	completeTaskExternal(taskId: string): void {
+		const taskItem = this.taskItems.get(taskId);
+		if (!taskItem) {
+			console.error(`Task item with id ${taskId} not found`);
+			return;
+		}
+
+		// Mark task as completed (modifying the original taskData object)
+		taskItem.taskData.completed = true;
+
+		// Notify parent component about task completion
+		this.onTaskComplete(taskItem.taskData);
+
+		// Start fade out animation and removal
+		this.fadeOutAndRemoveTask(taskId);
 	}
 
 	/**
@@ -296,7 +321,7 @@ export class TaskSectionE extends g.E {
 			onComplete: (taskId: string) => {
 				const taskItem = this.taskItems.get(taskId);
 				if (taskItem) {
-					this.onTaskExecute(taskItem.taskData);
+					this.handleTaskExecute(taskItem.taskData);
 				}
 			},
 		});
@@ -318,7 +343,13 @@ export class TaskSectionE extends g.E {
 	 * Handles task execution when execute button is clicked
 	 * @param task The task data for the executed task
 	 */
-	private onTaskExecute(task: TaskData): void {
+	private handleTaskExecute(task: TaskData): void {
+		// Check if there's an external handler for this task (like profile)
+		if (this.onTaskExecute && task.id === "profile") {
+			this.onTaskExecute(task);
+			return;
+		}
+
 		// Close any existing modal first
 		if (this.currentModal) {
 			this.closeModal();

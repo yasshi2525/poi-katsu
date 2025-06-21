@@ -7,7 +7,13 @@ export = () => {
 		totalTimeLimit: 100,
 		gameState: {
 			score: 0
-		}
+		},
+		playerProfile: {
+			name: "プレイヤー",
+			avatar: "😀"
+		},
+		allPlayersProfiles: {},
+		allPlayersScores: {}
 	};
 	g.game.vars = vars;
 
@@ -19,7 +25,7 @@ export = () => {
 	});
 	// セッションパラメーターを受け取ってゲームを開始します
 	scene.onMessage.add((msg) => {
-		if (msg.data && msg.data.type === "start" && msg.data.parameters) {
+		if (msg.data && msg.data.type === "start" && msg.data.parameters?.totalTimeLimit) {
 			vars.mode = "ranking";
 			vars.totalTimeLimit = msg.data.parameters.totalTimeLimit - 20;
 			if (msg.data.parameters.randomSeed != null) {
