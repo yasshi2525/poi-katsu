@@ -80,6 +80,51 @@
 			"path": "image/panel.png",
 			"width": 200,
 			"height": 200
+		},
+		"number": {
+			"type": "image",
+			"path": "image/number.png",
+			"width": 708,
+			"height": 69
+		},
+		"number-glyph": {
+			"type": "text",
+			"path": "text/number-glyph.json"
+		},
+		"numberE": {
+			"type": "script",
+			"path": "script/entity/numberE.js",
+			"global": true
+		},
+		"homeE": {
+			"type": "script",
+			"path": "script/entity/homeE.js",
+			"global": true
+		},
+		"appNavigationSectionE": {
+			"type": "script",
+			"path": "script/entity/appNavigationSectionE.js",
+			"global": true
+		},
+		"bannerSectionE": {
+			"type": "script",
+			"path": "script/entity/bannerSectionE.js",
+			"global": true
+		},
+		"headerSectionE": {
+			"type": "script",
+			"path": "script/entity/headerSectionE.js",
+			"global": true
+		},
+		"taskSectionE": {
+			"type": "script",
+			"path": "script/entity/taskSectionE.js",
+			"global": true
+		},
+		"timelineSectionE": {
+			"type": "script",
+			"path": "script/entity/timelineSectionE.js",
+			"global": true
 		}
 	},
 	"environment": {

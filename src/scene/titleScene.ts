@@ -4,7 +4,10 @@ import { MainScene } from "./mainScene";
 
 export class TitleScene extends BaseScene {
 	constructor(param: g.SceneParameterObject) {
-		super(param);
+		super({
+			...param,
+			assetIds: []
+		});
 		this.onLoad.add(() => {
 			this.append(new g.FilledRect({
 				scene: this,
