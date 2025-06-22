@@ -1,5 +1,6 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AgreementE } from "../entity/agreementE";
+import { HeaderE } from "../entity/headerE";
 import { HomeE } from "../entity/homeE";
 import { BaseScene } from "./baseScene";
 
@@ -9,6 +10,8 @@ const config = {
 
 export class MainScene extends BaseScene {
 	private remainFrame: number;
+	private lastRemainSec: number;
+	private header?: HeaderE;
 	private home?: HomeE;
 
 	constructor(param: g.SceneParameterObject) {
@@ -17,10 +20,12 @@ export class MainScene extends BaseScene {
 			assetIds: [
 				...param.assetIds ?? [],
 				...AgreementE.assetIds,
+				...HeaderE.assetIds,
 				...HomeE.assetIds
 			]
 		});
 		this.remainFrame = (this.game.vars as GameVars).totalTimeLimit * this.game.fps;
+		this.lastRemainSec = Math.floor(this.remainFrame / this.game.fps);
 		this.onLoad.add(() => {
 			// Initialize multi-player broadcast handlers immediately to prevent race conditions
 			this.initializeMessageHandlers();
@@ -28,8 +33,13 @@ export class MainScene extends BaseScene {
 			this.onUpdate.add(() => {
 				if (this.remainFrame > 0) {
 					this.remainFrame--;
-					if (this.home) {
-						this.home.setTime(this.remainFrame);
+					const currentRemainSec = Math.floor(this.remainFrame / this.game.fps);
+					// Only update header when seconds change
+					if (currentRemainSec !== this.lastRemainSec) {
+						this.lastRemainSec = currentRemainSec;
+						if (this.header) {
+							this.header.setTime(currentRemainSec);
+						}
 					}
 				}
 			});
@@ -96,6 +106,19 @@ export class MainScene extends BaseScene {
 		const agreement = new AgreementE({
 			scene: this,
 			onComplete: () => {
+				const gameVars = this.game.vars as GameVars;
+
+				// Create header at scene level (always visible)
+				this.header = new HeaderE({
+					scene: this,
+					width: this.game.width,
+					height: 80,
+					score: gameVars.gameState.score,
+					remainingSec: gameVars.totalTimeLimit
+				});
+				this.append(this.header);
+
+				// Create home with reference to scene-level header
 				this.home = new HomeE({
 					scene: this,
 					parent: this,
@@ -106,6 +129,7 @@ export class MainScene extends BaseScene {
 					anchorX: 0.5,
 					anchorY: 0.5,
 					opacity: 0,
+					header: this.header
 				});
 				new Timeline(this).create(this.home)
 					.fadeIn(config.fadeIn.duration);

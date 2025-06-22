@@ -140,6 +140,16 @@
 			"type": "script",
 			"path": "script/entity/timelineE.js",
 			"global": true
+		},
+		"shopE": {
+			"type": "script",
+			"path": "script/entity/shopE.js",
+			"global": true
+		},
+		"headerE": {
+			"type": "script",
+			"path": "script/entity/headerE.js",
+			"global": true
 		}
 	},
 	"environment": {

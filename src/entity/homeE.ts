@@ -2,9 +2,11 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AdBannerE, BannerData } from "./adBannerE";
 import { AppListE } from "./appListE";
+import { HeaderE } from "./headerE";
 import { ModalE } from "./modalE";
 import { PointDisplayE } from "./pointDisplayE";
 import { ProfileEditorE } from "./profileEditorE";
+import { ShopE } from "./shopE";
 import { TaskListE, TaskData } from "./taskListE";
 import { TimelineE } from "./timelineE";
 
@@ -33,6 +35,8 @@ export interface HomeParameterObject extends g.EParameterObject {
 	width: number;
 	/** Screen height */
 	height: number;
+	/** Header reference from scene level */
+	header: HeaderE;
 }
 
 /**
@@ -43,12 +47,13 @@ export class HomeE extends g.E {
 	static assetIds: string[] = [...PointDisplayE.assetIds, ...TaskListE.assetIds];
 
 	// Component sections
-	private pointDisplay!: PointDisplayE;
+	private header: HeaderE;
 	private adBanner!: AdBannerE;
 	private taskList!: TaskListE;
 	private timeline!: TimelineE;
 	private appList!: AppListE;
 	private profileEditor?: ProfileEditorE;
+	private shop?: ShopE;
 	private scoreBroadcaster?: ScoreBroadcaster;
 	private currentModal?: ModalE<string>;
 
@@ -57,6 +62,7 @@ export class HomeE extends g.E {
 	private readonly screenHeight: number;
 	private isProfileEditorVisible: boolean = false;
 	private isTimelineVisible: boolean = false;
+	private isShopVisible: boolean = false;
 
 	// Task data
 	private readonly tasks: TaskData[] = [
@@ -134,6 +140,7 @@ export class HomeE extends g.E {
 	constructor(options: HomeParameterObject) {
 		super(options);
 
+		this.header = options.header;
 		this.screenWidth = options.width;
 		this.screenHeight = options.height;
 
@@ -151,7 +158,7 @@ export class HomeE extends g.E {
 	 * @returns Current score
 	 */
 	getScore(): number {
-		return this.pointDisplay.getScore();
+		return this.header.getScore();
 	}
 
 	/**
@@ -159,15 +166,15 @@ export class HomeE extends g.E {
 	 * @param points Points to add
 	 */
 	addScore(points: number): void {
-		const currentScore = this.pointDisplay.getScore();
+		const currentScore = this.header.getScore();
 		const newScore = currentScore + points;
 
 		// Update game vars to keep score synchronized
 		const gameVars = this.scene.game.vars as GameVars;
 		gameVars.gameState.score = newScore;
 
-		// Update point display
-		this.pointDisplay.setScore(newScore);
+		// Update header display
+		this.header.setScore(newScore);
 
 		// Broadcast score to other participants
 		if (this.scoreBroadcaster) {
@@ -181,7 +188,7 @@ export class HomeE extends g.E {
 	 */
 	setTime(remainFrame: number): void {
 		const newRemainSecond = Math.floor(remainFrame / this.scene.game.fps);
-		this.pointDisplay.setTime(newRemainSecond);
+		this.header.setTime(newRemainSecond);
 	}
 
 	/**
@@ -221,51 +228,48 @@ export class HomeE extends g.E {
 	 * Creates all component sections
 	 */
 	private createComponents(width: number, height: number, score: number, remainingSec: number): void {
-		// Create point display (full screen, positioned internally)
-		this.pointDisplay = new PointDisplayE({
-			scene: this.scene,
-			width: width,
-			height: height,
-			score: score,
-			remainingSec: remainingSec
-		});
-		this.append(this.pointDisplay);
+		// Note: header is created at scene level, not here
 
-		// Create ad banner (full screen, positioned internally)
+		// Create ad banner (adjusted for header)
 		this.adBanner = new AdBannerE({
 			scene: this.scene,
 			width: width,
-			height: height,
-			banners: this.banners
+			height: height - 80,
+			banners: this.banners,
+			y: 80
 		});
 		this.append(this.adBanner);
 
-		// Create task list (full screen, positioned internally)
+		// Create task list (adjusted for header)
 		this.taskList = new TaskListE({
 			scene: this.scene,
 			width: width,
-			height: height,
+			height: height - 80,
 			tasks: this.tasks,
 			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
-			onTaskComplete: (taskData: TaskData) => this.addScore(taskData.rewardPoints)
+			onTaskComplete: (taskData: TaskData) => this.addScore(taskData.rewardPoints),
+			y: 80
 		});
 		this.append(this.taskList);
 
-		// Create timeline (full screen, positioned internally, initially hidden)
+		// Create timeline (adjusted for header, initially hidden)
 		this.timeline = new TimelineE({
 			scene: this.scene,
 			width: width,
-			height: height,
+			height: height - 80,
 			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
+			y: 80
 		});
 		this.timeline.hide();
 		this.append(this.timeline);
 
-		// Create app list (full screen, positioned internally)
+		// Create app list (adjusted for header)
 		this.appList = new AppListE({
 			scene: this.scene,
 			width: width,
-			height: height
+			height: height - 80,
+			onShopClick: () => this.switchToShop(),
+			y: 80
 		});
 		this.append(this.appList);
 	}
@@ -288,6 +292,8 @@ export class HomeE extends g.E {
 			this.switchToProfileEditor();
 		} else if (taskData.id === "sns") {
 			this.handleSnsTaskExecution(taskData);
+		} else if (taskData.id === "shopping") {
+			this.handleShoppingTaskExecution(taskData);
 		} else {
 			// For other tasks, use the default modal behavior
 			// This will be handled by the task section itself
@@ -370,12 +376,11 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Gets all home screen sections for animation
+	 * Gets all home screen sections for animation (excluding fixed header)
 	 * @returns Array of home screen sections
 	 */
 	private getHomeSections(): g.E[] {
 		return [
-			this.pointDisplay,
 			this.adBanner,
 			this.taskList,
 			this.timeline,
@@ -384,11 +389,11 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Updates the point display with current profile data from gameVars
+	 * Updates the header with current profile data from gameVars
 	 */
 	private updateHeaderWithCurrentProfile(): void {
 		const gameVars = this.scene.game.vars as GameVars;
-		this.pointDisplay.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
+		this.header.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
 	}
 
 	/**
@@ -625,6 +630,198 @@ export class HomeE extends g.E {
 		timeline.create(achievementNotification)
 			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
 			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for SNS
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.call(() => {
+				achievementNotification.destroy();
+			});
+	}
+
+	/**
+	 * Handles shopping task execution with shop app reveal
+	 * @param taskData The shopping task data
+	 */
+	private handleShoppingTaskExecution(taskData: TaskData): void {
+		// Show modal explaining shopping app feature
+		this.showShoppingUnlockModal(taskData);
+	}
+
+	/**
+	 * Shows modal explaining shopping app feature unlock
+	 * @param taskData The shopping task data
+	 */
+	private showShoppingUnlockModal(taskData: TaskData): void {
+		// Close any existing modal first
+		if (this.currentModal) {
+			this.closeModal();
+		}
+
+		const modalMessage = "通販サービスと連携しました！\n\n通販アプリが利用可能になりました。\n商品を購入してポイントを獲得しましょう！";
+
+		this.currentModal = new ModalE({
+			scene: this.scene,
+			name: "shoppingUnlockModal",
+			args: taskData.id,
+			title: "通販アプリ解放！",
+			message: modalMessage,
+			width: 500,
+			height: 300,
+			onClose: () => this.closeModal(),
+		});
+
+		// Add OK button to modal
+		this.addShoppingModalButton(taskData);
+
+		// Append modal to scene to ensure it's always on top
+		if (this.currentModal) {
+			this.scene.append(this.currentModal);
+		}
+	}
+
+	/**
+	 * Adds OK button to shopping unlock modal by replacing the close button
+	 * @param taskData The task data for the button
+	 */
+	private addShoppingModalButton(taskData: TaskData): void {
+		if (!this.currentModal) return;
+
+		// Replace close button with custom OK button
+		this.currentModal.replaceCloseButton({
+			text: "OK",
+			backgroundColor: "#2980b9",
+			textColor: "white",
+			fontSize: 14,
+			width: 80,
+			height: 35,
+			onComplete: () => {
+				this.completeShoppingTask(taskData);
+			}
+		});
+	}
+
+	/**
+	 * Completes shopping task and reveals shop app
+	 * @param taskData The shopping task data
+	 */
+	private completeShoppingTask(taskData: TaskData): void {
+		// Mark task as completed
+		this.taskList.completeTaskExternal(taskData.id);
+
+		// Reveal shop app in AppList with delay to ensure modal is properly closed
+		this.scene.setTimeout(() => {
+			this.appList.revealShopApp();
+		}, ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
+
+		// Show achievement notification
+		this.showShoppingRewardNotification(taskData);
+	}
+
+	/**
+	 * Switches from HomeE to ShopE with swipe animation
+	 */
+	private switchToShop(): void {
+		if (this.isShopVisible) return;
+
+		// Create or reuse shop positioned off-screen to the right
+		if (!this.shop) {
+			this.shop = new ShopE({
+				scene: this.scene,
+				width: this.screenWidth,
+				height: this.screenHeight,
+				x: this.screenWidth, // Start off-screen to the right
+				y: 0,
+				onBack: () => this.switchBackFromShop()
+			});
+			this.append(this.shop);
+		} else {
+			// Reposition existing shop off-screen for animation
+			this.shop.x = this.screenWidth;
+		}
+
+		this.isShopVisible = true;
+
+		// Create swipe animation: HomeE slides left, ShopE slides in from right
+		const timeline = new Timeline(this.scene);
+
+		// Animate HomeE sections sliding out to the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x - ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+
+		// Animate ShopE sliding in from the right
+		timeline.create(this.shop)
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+	}
+
+	/**
+	 * Switches back from ShopE to HomeE with swipe animation
+	 */
+	private switchBackFromShop(): void {
+		if (!this.isShopVisible || !this.shop) return;
+
+		// Create swipe animation: ShopE slides right, HomeE slides in from left
+		const timeline = new Timeline(this.scene);
+
+		// Animate ShopE sliding out to the right
+		timeline.create(this.shop)
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Don't destroy shop - keep it for reuse, just mark as not visible
+				this.isShopVisible = false;
+			});
+
+		// Animate HomeE sections sliding back in from the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x + ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+	}
+
+	/**
+	 * Shows shopping reward notification
+	 * @param taskData The completed shopping task
+	 */
+	private showShoppingRewardNotification(taskData: TaskData): void {
+		// Create achievement notification that slides in from the right
+		const achievementNotification = new g.E({
+			scene: this.scene,
+			x: this.screenWidth, // Start off-screen to the right
+			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET + 100, // Position below SNS notifications
+		});
+
+		// Background for notification
+		const notificationBg = new g.FilledRect({
+			scene: this.scene,
+			width: 350,
+			height: 80,
+			x: 0,
+			y: 0,
+			cssColor: "#2980b9", // Blue color for shopping
+		});
+		achievementNotification.append(notificationBg);
+
+		// Achievement text
+		const achievementText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 14,
+				fontColor: "white",
+			}),
+			text: `通販連携完了！ +${taskData.rewardPoints}pt\n通販アプリが利用可能に！`,
+			x: 10,
+			y: 15,
+		});
+		achievementNotification.append(achievementText);
+
+		this.append(achievementNotification);
+
+		// Animate notification: slide in, wait, slide out
+		const timeline = new Timeline(this.scene);
+		timeline.create(achievementNotification)
+			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for shopping
 			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
 			.call(() => {
 				achievementNotification.destroy();

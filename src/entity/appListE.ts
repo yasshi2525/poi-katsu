@@ -1,3 +1,15 @@
+import { Timeline } from "@akashic-extension/akashic-timeline";
+
+/**
+ * Animation configuration constants
+ */
+const ANIMATION_CONFIG = {
+	SHOP_FADE_IN_DURATION: 600,
+	SHOP_HIGHLIGHT_DURATION: 1000,
+	SHOP_HIGHLIGHT_SCALE: 1.1,
+	SHOP_HIGHLIGHT_OPACITY: 0.8,
+} as const;
+
 /**
  * Layout configuration interface
  */
@@ -10,6 +22,17 @@ interface LayoutConfig {
 }
 
 /**
+ * App configuration interface
+ */
+interface AppConfig {
+	icon: string;
+	name: string;
+	color: string;
+	badge?: string;
+	visible?: boolean;
+}
+
+/**
  * Parameter object for AppList
  */
 export interface AppListParameterObject extends g.EParameterObject {
@@ -17,6 +40,8 @@ export interface AppListParameterObject extends g.EParameterObject {
 	width: number;
 	/** Screen height */
 	height: number;
+	/** Callback when shop app is clicked */
+	onShopClick?: () => void;
 }
 
 /**
@@ -24,6 +49,10 @@ export interface AppListParameterObject extends g.EParameterObject {
  */
 export class AppListE extends g.E {
 	private readonly layout: LayoutConfig;
+	private readonly onShopClick?: () => void;
+	private readonly apps: AppConfig[];
+	private shopAppElements: g.E[] = [];
+	private shopAppVisible: boolean = false;
 
 	/**
 	 * Creates a new AppList instance
@@ -32,8 +61,90 @@ export class AppListE extends g.E {
 	constructor(options: AppListParameterObject) {
 		super(options);
 
+		this.onShopClick = options.onShopClick;
 		this.layout = this.createLayoutConfig(options.width, options.height);
+
+		// Initialize apps configuration
+		this.apps = [
+			{ icon: "👤", name: "プロフィール", color: "#3498db", visible: true },
+			{ icon: "🛒", name: "通販", color: "#2980b9", visible: false }, // Initially hidden
+			{ icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1", visible: true },
+			{ icon: "🛍️", name: "フリマ", color: "#7f8c8d", visible: true },
+		];
+
 		this.createLayout();
+	}
+
+	/**
+	 * Reveals the shop app with animation
+	 */
+	revealShopApp(): void {
+		if (this.shopAppVisible) return;
+
+		// Update app visibility state
+		const shopApp = this.apps.find(app => app.name === "通販");
+		if (shopApp) {
+			shopApp.visible = true;
+			this.shopAppVisible = true;
+		}
+
+		// Create the shop app icon (index 1 for shop)
+		const iconLayout = this.layout.children!.icon;
+		const appX = this.layout.x + iconLayout.x + (1 * 180); // Shop is at index 1
+		const appY = this.layout.y + iconLayout.y;
+
+		this.createAppIcon(shopApp!, appX, appY, 1);
+
+		// Start with opacity 0 for fade-in effect
+		this.shopAppElements.forEach(element => {
+			element.opacity = 0;
+		});
+
+		// Add fade-in animation
+		const timeline = new Timeline(this.scene);
+		this.shopAppElements.forEach(element => {
+			timeline.create(element)
+				.to({ opacity: 1 }, ANIMATION_CONFIG.SHOP_FADE_IN_DURATION);
+		});
+
+		// Add highlighting effect after fade-in
+		timeline.create(this)
+			.wait(ANIMATION_CONFIG.SHOP_FADE_IN_DURATION)
+			.call(() => {
+				this.highlightShopApp();
+			});
+	}
+
+	/**
+	 * Highlights the shop app with a special effect and automatically opens shop
+	 */
+	highlightShopApp(): void {
+		if (!this.shopAppVisible) return;
+
+		// Create highlighting animation with scale and opacity pulsing
+		const timeline = new Timeline(this.scene);
+		const shopIconBg = this.shopAppElements[0]; // First element is the icon background
+
+		if (shopIconBg) {
+			// Pulse animation: scale up and fade out, then back to normal
+			timeline.create(shopIconBg)
+				.to({
+					scaleX: ANIMATION_CONFIG.SHOP_HIGHLIGHT_SCALE,
+					scaleY: ANIMATION_CONFIG.SHOP_HIGHLIGHT_SCALE,
+					opacity: ANIMATION_CONFIG.SHOP_HIGHLIGHT_OPACITY
+				}, ANIMATION_CONFIG.SHOP_HIGHLIGHT_DURATION / 2)
+				.to({
+					scaleX: 1,
+					scaleY: 1,
+					opacity: 1
+				}, ANIMATION_CONFIG.SHOP_HIGHLIGHT_DURATION / 2)
+				.call(() => {
+					// Automatically trigger shop click after highlighting animation ends
+					if (this.onShopClick) {
+						this.onShopClick();
+					}
+				});
+		}
 	}
 
 	/**
@@ -104,31 +215,33 @@ export class AppListE extends g.E {
 		});
 		this.append(appTitle);
 
-		// App icons
-		const apps = [
-			{ icon: "👤", name: "プロフィール", color: "#3498db" },
-			{ icon: "🛒", name: "通販", color: "#2980b9" },
-			{ icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1" },
-			{ icon: "🛍️", name: "フリマ", color: "#7f8c8d" },
-		];
-
-		apps.forEach((app, index) => {
-			const appX = this.layout.x + iconLayout.x + (index * 180);
-			const appY = this.layout.y + iconLayout.y;
-			this.createAppIcon(app.icon, app.name, app.color, app.badge, appX, appY);
+		// Create visible app icons
+		this.apps.forEach((app, index) => {
+			if (app.visible) {
+				const appX = this.layout.x + iconLayout.x + (index * 180);
+				const appY = this.layout.y + iconLayout.y;
+				this.createAppIcon(app, appX, appY, index);
+			}
 		});
 	}
 
 	/**
 	 * Creates a single app icon
 	 */
-	private createAppIcon(icon: string, name: string, color: string, badge: string | undefined, x: number, y: number): void {
+	private createAppIcon(app: AppConfig, x: number, y: number, appIndex: number): void {
 		const iconChildrenLayout = this.layout.children!.icon.children!;
 		const backgroundLayout = iconChildrenLayout.background;
 		const iconLabelLayout = iconChildrenLayout.iconLabel;
 		const badgeLayout = iconChildrenLayout.badge;
 		const badgeLabelLayout = iconChildrenLayout.badgeLabel;
 		const nameLabelLayout = iconChildrenLayout.nameLabel;
+
+		// Container for this app's elements
+		const appContainer = new g.E({
+			scene: this.scene,
+			x: 0,
+			y: 0,
+		});
 
 		// App icon background
 		const iconBg = new g.FilledRect({
@@ -137,10 +250,20 @@ export class AppListE extends g.E {
 			height: backgroundLayout.height,
 			x: x + backgroundLayout.x,
 			y: y + backgroundLayout.y,
-			cssColor: color,
+			cssColor: app.color,
 			touchable: true,
 		});
-		this.append(iconBg);
+
+		// Add click handler for shop app
+		if (app.name === "通販") {
+			iconBg.onPointDown.add(() => {
+				if (this.onShopClick) {
+					this.onShopClick();
+				}
+			});
+		}
+
+		appContainer.append(iconBg);
 
 		// Icon
 		const iconLabel = new g.Label({
@@ -150,14 +273,14 @@ export class AppListE extends g.E {
 				fontFamily: "sans-serif",
 				size: 24,
 			}),
-			text: icon,
+			text: app.icon,
 			x: x + iconLabelLayout.x,
 			y: y + iconLabelLayout.y,
 		});
-		this.append(iconLabel);
+		appContainer.append(iconLabel);
 
 		// Badge (if present)
-		if (badge) {
+		if (app.badge) {
 			const badgeBg = new g.FilledRect({
 				scene: this.scene,
 				width: badgeLayout.width,
@@ -166,7 +289,7 @@ export class AppListE extends g.E {
 				y: y + badgeLayout.y,
 				cssColor: "#e74c3c",
 			});
-			this.append(badgeBg);
+			appContainer.append(badgeBg);
 
 			const badgeLabel = new g.Label({
 				scene: this.scene,
@@ -176,11 +299,11 @@ export class AppListE extends g.E {
 					size: 12,
 					fontColor: "white",
 				}),
-				text: badge,
+				text: app.badge,
 				x: x + badgeLabelLayout.x,
 				y: y + badgeLabelLayout.y,
 			});
-			this.append(badgeLabel);
+			appContainer.append(badgeLabel);
 		}
 
 		// App name
@@ -192,10 +315,22 @@ export class AppListE extends g.E {
 				size: 12,
 				fontColor: "white",
 			}),
-			text: name,
+			text: app.name,
 			x: x + nameLabelLayout.x,
 			y: y + nameLabelLayout.y,
 		});
-		this.append(nameLabel);
+		appContainer.append(nameLabel);
+
+		// Store shop app elements for later manipulation
+		if (app.name === "通販") {
+			this.shopAppElements = [iconBg, iconLabel, nameLabel];
+			if (app.badge) {
+				// Add badge elements if they exist
+				this.shopAppElements.push(appContainer.children![appContainer.children!.length - 2]); // badgeBg
+				this.shopAppElements.push(appContainer.children![appContainer.children!.length - 1]); // badgeLabel before nameLabel
+			}
+		}
+
+		this.append(appContainer);
 	}
 }

@@ -12,6 +12,7 @@
     "build:watch": "tsc --watch",
     "update": "akashic scan asset && akashic scan globalScripts",
     "lint": "eslint . --fix",
+    "lint:check": "eslint .",
     "start": "akashic sandbox .",
     "start:watch": "akashic sandbox . --watch",
     "start:multi": "akashic serve -s nicolive",

@@ -1,3 +1,4 @@
+import { HeaderE } from "../../src/entity/headerE";
 import { HomeE } from "../../src/entity/homeE";
 import { LabelButtonE } from "../../src/entity/labelButtonE";
 import { ModalE } from "../../src/entity/modalE";
@@ -5,6 +6,7 @@ import { ProfileEditorE } from "../../src/entity/profileEditorE";
 
 describe("HomeE", () => {
 	let home: HomeE;
+	let header: HeaderE;
 
 	beforeEach(() => {
 		// Set up game variables using the pre-tuned global scene
@@ -15,11 +17,22 @@ describe("HomeE", () => {
 		gameVars.playerProfile = { name: "プレイヤー", avatar: "😀" };
 		gameVars.allPlayersProfiles = {};
 
+		// Create header for testing
+		header = new HeaderE({
+			scene: scene,
+			width: scene.game.width,
+			height: 80,
+			score: gameVars.gameState.score,
+			remainingSec: gameVars.totalTimeLimit,
+		});
+		scene.append(header);
+
 		// Create HomeE instance using global scene
 		home = new HomeE({
 			scene: scene,
 			width: scene.game.width,
 			height: scene.game.height,
+			header: header,
 		});
 		scene.append(home);
 	});
@@ -27,6 +40,9 @@ describe("HomeE", () => {
 	afterEach(() => {
 		if (home) {
 			home.destroy();
+		}
+		if (header) {
+			header.destroy();
 		}
 	});
 
@@ -280,6 +296,26 @@ describe("HomeE", () => {
 		};
 
 		/**
+		 * Helper function to complete shopping task (custom modal flow)
+		 */
+		const completeShoppingTask = async (): Promise<void> => {
+			// Step 1: Click execute button
+			const executeButton = findTaskExecuteButton("shopping");
+			expect(executeButton).not.toBeNull();
+			executeButton!.send();
+
+			// Step 2: Find and click the OK button in the shopping unlock modal
+			const modal = findCurrentModal();
+			expect(modal).not.toBeNull();
+			const okButton = findModalReplacedButton(modal!);
+			expect(okButton).not.toBeNull();
+			okButton!.send();
+
+			// Step 3: Advance game context to complete animations
+			await gameContext.advance(1000); // Advance enough time to complete all animations
+		};
+
+		/**
 		 * Helper function to complete any task (chooses the right flow based on task type)
 		 */
 		const completeTask = async (taskId: string): Promise<void> => {
@@ -288,6 +324,10 @@ describe("HomeE", () => {
 			}
 			else if (taskId === "sns") {
 				await completeSnsTask();
+			}
+			else if (taskId === "shopping") {
+				// Shopping task uses modal like SNS task
+				await completeShoppingTask();
 			}
 			else {
 				await completeModalTask(taskId);
@@ -463,37 +503,30 @@ describe("HomeE", () => {
 			expect(gameVars.playerProfile.avatar).toBeDefined();
 		});
 
-		it("should handle non-profile tasks with modal behavior", async () => {
+		it("should handle shopping task with modal explanation", async () => {
 			// Get initial score
 			const initialScore = home.getScore();
 
-			// Test shopping task (should use modal flow)
+			// Test shopping task (should use modal like SNS task)
 			const shoppingButton = findTaskExecuteButton("shopping");
 			expect(shoppingButton).not.toBeNull();
 
 			// Click shopping task execute button
 			shoppingButton!.send();
 
-			// Verify modal appears (different from profile task)
-			let modal = findCurrentModal();
+			// Verify modal appears with shopping app explanation
+			const modal = findCurrentModal();
 			expect(modal).not.toBeNull();
 
 			// Verify no profile editor appears
 			expect(findCurrentProfileEditor()).toBeNull();
 
 			// Complete the modal flow
-			const confirmButton = findModalConfirmButton(modal!);
-			expect(confirmButton).not.toBeNull();
-			confirmButton!.send();
-
-			// Find success modal and OK button
-			modal = findCurrentModal();
-			expect(modal).not.toBeNull();
-			const okButton = findModalOkButton(modal!);
+			const okButton = findModalReplacedButton(modal!);
 			expect(okButton).not.toBeNull();
 			okButton!.send();
 
-			// Wait for animations
+			// Wait for animations (including task fade-out animation)
 			await gameContext.advance(1000);
 
 			// Verify task is completed

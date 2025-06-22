@@ -344,8 +344,8 @@ export class TaskListE extends g.E {
 	 * @param task The task data for the executed task
 	 */
 	private handleTaskExecute(task: TaskData): void {
-		// Check if there's an external handler for this task (like profile or SNS)
-		if (this.onTaskExecute && (task.id === "profile" || task.id === "sns")) {
+		// Check if there's an external handler for this task (like profile, SNS, or shopping)
+		if (this.onTaskExecute && (task.id === "profile" || task.id === "sns" || task.id === "shopping")) {
 			this.onTaskExecute(task);
 			return;
 		}
