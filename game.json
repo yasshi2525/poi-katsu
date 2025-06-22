@@ -150,6 +150,11 @@
 			"type": "script",
 			"path": "script/entity/headerE.js",
 			"global": true
+		},
+		"taskManager": {
+			"type": "script",
+			"path": "script/manager/taskManager.js",
+			"global": true
 		}
 	},
 	"environment": {

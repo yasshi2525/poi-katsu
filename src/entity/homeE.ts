@@ -1,4 +1,5 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
 import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AdBannerE, BannerData } from "./adBannerE";
 import { AppListE } from "./appListE";
@@ -57,6 +58,9 @@ export class HomeE extends g.E {
 	private scoreBroadcaster?: ScoreBroadcaster;
 	private currentModal?: ModalE<string>;
 
+	// Task management
+	private taskManager!: TaskManager;
+
 	// Screen state
 	private readonly screenWidth: number;
 	private readonly screenHeight: number;
@@ -64,33 +68,6 @@ export class HomeE extends g.E {
 	private isTimelineVisible: boolean = false;
 	private isShopVisible: boolean = false;
 
-	// Task data
-	private readonly tasks: TaskData[] = [
-		{
-			id: "profile",
-			icon: "👤",
-			title: "プロフィールを設定する",
-			reward: "50pt",
-			rewardPoints: 50,
-			completed: false
-		},
-		{
-			id: "shopping",
-			icon: "🛒",
-			title: "通販サービスと連携する",
-			reward: "100pt",
-			rewardPoints: 100,
-			completed: false
-		},
-		{
-			id: "sns",
-			icon: "📱",
-			title: "SNSと連携する",
-			reward: "100pt",
-			rewardPoints: 100,
-			completed: false
-		},
-	];
 
 	// Banner data
 	private readonly banners: BannerData[] = [
@@ -148,6 +125,9 @@ export class HomeE extends g.E {
 		const gameVars = options.scene.game.vars as GameVars;
 		const remainingSec = gameVars.totalTimeLimit;
 		const score = gameVars.gameState.score;
+
+		// Initialize TaskManager with execution context
+		this.initializeTaskManager();
 
 		this.createComponents(options.width, options.height, score, remainingSec);
 		this.initializeScoreBroadcaster(score);
@@ -225,6 +205,38 @@ export class HomeE extends g.E {
 
 
 	/**
+	 * Initializes TaskManager with execution context
+	 */
+	private initializeTaskManager(): void {
+		const context: TaskExecutionContext = {
+			scene: this.scene,
+			screenWidth: this.screenWidth,
+			screenHeight: this.screenHeight,
+			onScoreAdd: (points: number) => this.addScore(points),
+			onProfileSwitch: () => this.switchToProfileEditor(),
+			onTimelineReveal: () => this.revealTimeline(),
+			onShopAppReveal: () => this.appList.revealShopApp(),
+			onModalCreate: (modal: ModalE<string>) => {
+				this.currentModal = modal;
+				this.scene.append(modal);
+			},
+			onModalClose: () => this.closeModal(),
+			onAchievementShow: (task: TaskData, notificationType?: string) => {
+				if (notificationType === "sns") {
+					this.showSnsRewardNotification(task);
+				} else if (notificationType === "shopping") {
+					this.showShoppingRewardNotification(task);
+				} else {
+					this.showAchievementEffect(task);
+				}
+			},
+			onTaskComplete: (taskId: string) => this.taskList.completeTaskExternal(taskId)
+		};
+
+		this.taskManager = new TaskManager(context);
+	}
+
+	/**
 	 * Creates all component sections
 	 */
 	private createComponents(width: number, height: number, score: number, remainingSec: number): void {
@@ -240,14 +252,14 @@ export class HomeE extends g.E {
 		});
 		this.append(this.adBanner);
 
-		// Create task list (adjusted for header)
+		// Create task list (adjusted for header) - now using TaskManager's tasks
 		this.taskList = new TaskListE({
 			scene: this.scene,
 			width: width,
 			height: height - 80,
-			tasks: this.tasks,
+			tasks: this.taskManager.getTasks(),
 			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
-			onTaskComplete: (taskData: TaskData) => this.addScore(taskData.rewardPoints),
+			onTaskComplete: () => { /* Score addition is now handled by TaskManager */ },
 			y: 80
 		});
 		this.append(this.taskList);
@@ -285,29 +297,20 @@ export class HomeE extends g.E {
 
 	/**
 	 * Handles task execution when a task execute button is clicked
+	 * Delegates to TaskManager for centralized task logic
 	 * @param taskData The task data for the executed task
 	 */
-	private onTaskExecute(taskData: TaskData): void {
-		if (taskData.id === "profile") {
-			this.switchToProfileEditor();
-		} else if (taskData.id === "sns") {
-			this.handleSnsTaskExecution(taskData);
-		} else if (taskData.id === "shopping") {
-			this.handleShoppingTaskExecution(taskData);
-		} else {
-			// For other tasks, use the default modal behavior
-			// This will be handled by the task section itself
+	private async onTaskExecute(taskData: TaskData): Promise<void> {
+		try {
+			const result = await this.taskManager.executeTask(taskData);
+			if (!result.success) {
+				console.warn(`Task execution failed: ${result.message}`);
+			}
+		} catch (error) {
+			console.error("Task execution error:", error);
 		}
 	}
 
-	/**
-	 * Handles SNS task execution with timeline unlock
-	 * @param taskData The SNS task data
-	 */
-	private handleSnsTaskExecution(taskData: TaskData): void {
-		// Show modal explaining timeline feature
-		this.showTimelineUnlockModal(taskData);
-	}
 
 	/**
 	 * Switches from HomeE to ProfileEditorE with swipe animation
@@ -364,8 +367,8 @@ export class HomeE extends g.E {
 					this.profileEditor = undefined;
 				}
 				this.isProfileEditorVisible = false;
-				// Complete the profile task
-				this.completeProfileTask();
+				// Complete the profile task using TaskManager
+				this.taskManager.completeProfileTask();
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -396,18 +399,6 @@ export class HomeE extends g.E {
 		this.header.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
 	}
 
-	/**
-	 * Completes the profile task and shows achievement effect
-	 */
-	private completeProfileTask(): void {
-		const profileTask = this.tasks.find(task => task.id === "profile");
-		if (profileTask && !profileTask.completed) {
-			// Use TaskListE's external completion method to handle visual removal
-			this.taskList.completeTaskExternal("profile");
-			// Show achievement effect for profile completion
-			this.showAchievementEffect(profileTask);
-		}
-	}
 
 	/**
 	 * Shows achievement notification effect
@@ -489,80 +480,8 @@ export class HomeE extends g.E {
 		}
 	}
 
-	/**
-	 * Shows modal explaining timeline feature unlock
-	 * @param taskData The SNS task data
-	 */
-	private showTimelineUnlockModal(taskData: TaskData): void {
-		// Close any existing modal first
-		if (this.currentModal) {
-			this.closeModal();
-		}
 
-		const modalMessage = "SNSと連携しました！\n\nタイムライン機能が利用可能になりました。\n他のユーザーの投稿を見て、いいねやコメントでポイントを獲得しましょう！";
 
-		this.currentModal = new ModalE({
-			scene: this.scene,
-			name: "timelineUnlockModal",
-			args: taskData.id,
-			title: "タイムライン機能解放！",
-			message: modalMessage,
-			width: 500,
-			height: 300,
-			onClose: () => this.closeModal(),
-		});
-
-		// Add OK button to modal
-		this.addTimelineModalButton(taskData);
-
-		// Append modal to scene to ensure it's always on top
-		if (this.currentModal) {
-			this.scene.append(this.currentModal);
-		}
-	}
-
-	/**
-	 * Adds OK button to timeline unlock modal by replacing the close button
-	 * @param taskData The task data for the button
-	 */
-	private addTimelineModalButton(taskData: TaskData): void {
-		if (!this.currentModal) return;
-
-		// Replace close button with custom OK button
-		// Use the original close button position (bottom right of modal)
-		this.currentModal.replaceCloseButton({
-			text: "OK",
-			backgroundColor: "#27ae60",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
-			// Don't override x,y - use the original close button position
-			onComplete: () => {
-				this.completeSnsTask(taskData);
-			}
-		});
-	}
-
-	/**
-	 * Completes SNS task and reveals timeline
-	 * @param taskData The SNS task data
-	 */
-	private completeSnsTask(taskData: TaskData): void {
-		// Mark task as completed
-		this.taskList.completeTaskExternal(taskData.id);
-
-		// Add score reward
-		this.addScore(taskData.rewardPoints);
-
-		// Show timeline reveal animation with delay to ensure modal is properly closed
-		this.scene.setTimeout(() => {
-			this.revealTimeline();
-		}, ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
-
-		// Show achievement notification
-		this.showSnsRewardNotification(taskData);
-	}
 
 	/**
 	 * Reveals timeline with fade-in animation
@@ -636,84 +555,9 @@ export class HomeE extends g.E {
 			});
 	}
 
-	/**
-	 * Handles shopping task execution with shop app reveal
-	 * @param taskData The shopping task data
-	 */
-	private handleShoppingTaskExecution(taskData: TaskData): void {
-		// Show modal explaining shopping app feature
-		this.showShoppingUnlockModal(taskData);
-	}
 
-	/**
-	 * Shows modal explaining shopping app feature unlock
-	 * @param taskData The shopping task data
-	 */
-	private showShoppingUnlockModal(taskData: TaskData): void {
-		// Close any existing modal first
-		if (this.currentModal) {
-			this.closeModal();
-		}
 
-		const modalMessage = "通販サービスと連携しました！\n\n通販アプリが利用可能になりました。\n商品を購入してポイントを獲得しましょう！";
 
-		this.currentModal = new ModalE({
-			scene: this.scene,
-			name: "shoppingUnlockModal",
-			args: taskData.id,
-			title: "通販アプリ解放！",
-			message: modalMessage,
-			width: 500,
-			height: 300,
-			onClose: () => this.closeModal(),
-		});
-
-		// Add OK button to modal
-		this.addShoppingModalButton(taskData);
-
-		// Append modal to scene to ensure it's always on top
-		if (this.currentModal) {
-			this.scene.append(this.currentModal);
-		}
-	}
-
-	/**
-	 * Adds OK button to shopping unlock modal by replacing the close button
-	 * @param taskData The task data for the button
-	 */
-	private addShoppingModalButton(taskData: TaskData): void {
-		if (!this.currentModal) return;
-
-		// Replace close button with custom OK button
-		this.currentModal.replaceCloseButton({
-			text: "OK",
-			backgroundColor: "#2980b9",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
-			onComplete: () => {
-				this.completeShoppingTask(taskData);
-			}
-		});
-	}
-
-	/**
-	 * Completes shopping task and reveals shop app
-	 * @param taskData The shopping task data
-	 */
-	private completeShoppingTask(taskData: TaskData): void {
-		// Mark task as completed
-		this.taskList.completeTaskExternal(taskData.id);
-
-		// Reveal shop app in AppList with delay to ensure modal is properly closed
-		this.scene.setTimeout(() => {
-			this.appList.revealShopApp();
-		}, ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
-
-		// Show achievement notification
-		this.showShoppingRewardNotification(taskData);
-	}
 
 	/**
 	 * Switches from HomeE to ShopE with swipe animation

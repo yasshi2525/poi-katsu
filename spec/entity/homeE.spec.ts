@@ -454,8 +454,7 @@ describe("HomeE", () => {
 			expect(findTaskExecuteButton("sns")).toBeNull();
 
 			// Verify final score (500 + 50 + 100 + 100 = 750)
-			// Note: SNS task awards points twice due to both task completion and SNS-specific implementation
-			expect(home.getScore()).toBe(850);
+			expect(home.getScore()).toBe(750);
 		});
 
 		it("should handle profile task with screen switching behavior", async () => {
