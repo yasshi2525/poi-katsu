@@ -10,7 +10,7 @@ export class ModalE<T> extends g.E {
 	static assetIds: string[] = [...PanelE.assetIds];
 	readonly overlay: g.FilledRect;
 	readonly content: PanelE;
-	readonly closeButton: LabelButtonE<T>;
+	private _closeButton: LabelButtonE<T>;
 	private titleLabel: g.Label;
 	private messageLabels: g.Label[];
 
@@ -99,7 +99,7 @@ export class ModalE<T> extends g.E {
 		}));
 
 		// Close button
-		this.closeButton = new LabelButtonE({
+		this._closeButton = new LabelButtonE({
 			scene: options.scene,
 			name: options.name,
 			args: options.args,
@@ -115,7 +115,7 @@ export class ModalE<T> extends g.E {
 				this.destroy();
 			}
 		});
-		this.content.append(this.closeButton);
+		this.content.append(this._closeButton);
 
 		// Add visual feedback based on close button sync state
 		this.setupSyncStateHandling();
@@ -124,6 +124,59 @@ export class ModalE<T> extends g.E {
 		this.overlay.onPointDown.add(() => {
 			this.closeButton.send();
 		});
+	}
+
+	get closeButton(): LabelButtonE<T> {
+		return this._closeButton;
+	}
+
+	/**
+	 * Replaces the close button with a custom button while maintaining proper closing behavior
+	 * @param options Configuration options for the new button
+	 */
+	replaceCloseButton(options: {
+		text: string;
+		backgroundColor?: string;
+		textColor?: string;
+		fontSize?: number;
+		width?: number;
+		height?: number;
+		x?: number;
+		y?: number;
+		onComplete?: () => void;
+	}): void {
+		// Remove the existing close button
+		this.content.remove(this._closeButton);
+
+		// Create new close button with custom styling but same core functionality
+		const newCloseButton = new LabelButtonE({
+			scene: this.scene,
+			name: this._closeButton.name + "_replaced",
+			args: this._closeButton.msgArgs,
+			text: options.text,
+			width: options.width || 80,
+			height: options.height || 30,
+			x: options.x !== undefined ? options.x : this._closeButton.x,
+			y: options.y !== undefined ? options.y : this._closeButton.y,
+			backgroundColor: options.backgroundColor,
+			textColor: options.textColor,
+			fontSize: options.fontSize,
+			onComplete: (args) => {
+				// Execute custom completion logic first
+				if (options.onComplete) {
+					options.onComplete();
+				}
+				// Then destroy the modal (same as original behavior)
+				this.destroy();
+			}
+		});
+
+		// Replace the reference and append to content
+		this._closeButton = newCloseButton;
+		this.content.append(newCloseButton);
+
+		// Re-setup sync state handling for the new button
+		this.setupSyncStateHandling();
 	}
 
 	/**

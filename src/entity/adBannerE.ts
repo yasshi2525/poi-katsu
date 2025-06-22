@@ -39,9 +39,9 @@ interface BannerItem {
 }
 
 /**
- * Parameter object for BannerSection
+ * Parameter object for AdBanner
  */
-export interface BannerSectionParameterObject extends g.EParameterObject {
+export interface AdBannerParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -53,16 +53,16 @@ export interface BannerSectionParameterObject extends g.EParameterObject {
 /**
  * Banner section component that displays promotional banners
  */
-export class BannerSectionE extends g.E {
+export class AdBannerE extends g.E {
 	private readonly banners: BannerData[];
 	private readonly layout: LayoutConfig;
 	private currentBannerItem?: BannerItem;
 
 	/**
-	 * Creates a new BannerSection instance
-	 * @param options Configuration options for the banner section
+	 * Creates a new AdBanner instance
+	 * @param options Configuration options for the ad banner
 	 */
-	constructor(options: BannerSectionParameterObject) {
+	constructor(options: AdBannerParameterObject) {
 		super(options);
 
 		this.banners = options.banners;

@@ -10,9 +10,9 @@ interface LayoutConfig {
 }
 
 /**
- * Parameter object for AppNavigationSection
+ * Parameter object for AppList
  */
-export interface AppNavigationSectionParameterObject extends g.EParameterObject {
+export interface AppListParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -22,14 +22,14 @@ export interface AppNavigationSectionParameterObject extends g.EParameterObject 
 /**
  * App navigation section component that displays app icons
  */
-export class AppNavigationSectionE extends g.E {
+export class AppListE extends g.E {
 	private readonly layout: LayoutConfig;
 
 	/**
-	 * Creates a new AppNavigationSection instance
-	 * @param options Configuration options for the app navigation section
+	 * Creates a new AppList instance
+	 * @param options Configuration options for the app list
 	 */
-	constructor(options: AppNavigationSectionParameterObject) {
+	constructor(options: AppListParameterObject) {
 		super(options);
 
 		this.layout = this.createLayoutConfig(options.width, options.height);

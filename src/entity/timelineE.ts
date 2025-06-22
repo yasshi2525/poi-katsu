@@ -10,9 +10,9 @@ interface LayoutConfig {
 }
 
 /**
- * Parameter object for TimelineSection
+ * Parameter object for Timeline
  */
-export interface TimelineSectionParameterObject extends g.EParameterObject {
+export interface TimelineParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -22,14 +22,14 @@ export interface TimelineSectionParameterObject extends g.EParameterObject {
 /**
  * Timeline section component that displays timeline items
  */
-export class TimelineSectionE extends g.E {
+export class TimelineE extends g.E {
 	private readonly layout: LayoutConfig;
 
 	/**
-	 * Creates a new TimelineSection instance
-	 * @param options Configuration options for the timeline section
+	 * Creates a new Timeline instance
+	 * @param options Configuration options for the timeline
 	 */
-	constructor(options: TimelineSectionParameterObject) {
+	constructor(options: TimelineParameterObject) {
 		super(options);
 
 		this.layout = this.createLayoutConfig(options.width, options.height);
@@ -42,7 +42,7 @@ export class TimelineSectionE extends g.E {
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
 			x: screenWidth - 720, // Fixed internal positioning
-			y: 85, // Fixed internal positioning
+			y: 85, // Fixed internal positioning - relative to container
 			width: 700,
 			height: screenHeight - 265,
 			children: {

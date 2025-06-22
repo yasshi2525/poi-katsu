@@ -45,9 +45,9 @@ const ANIMATION_CONFIG = {
 } as const;
 
 /**
- * Parameter object for TaskSection
+ * Parameter object for TaskList
  */
-export interface TaskSectionParameterObject extends g.EParameterObject {
+export interface TaskListParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -63,7 +63,7 @@ export interface TaskSectionParameterObject extends g.EParameterObject {
 /**
  * Task section component that displays and manages tasks
  */
-export class TaskSectionE extends g.E {
+export class TaskListE extends g.E {
 	static assetIds: string[] = [...ModalE.assetIds];
 
 	private readonly tasks: TaskData[];
@@ -74,10 +74,10 @@ export class TaskSectionE extends g.E {
 	private currentModal?: ModalE<string>;
 
 	/**
-	 * Creates a new TaskSection instance
-	 * @param options Configuration options for the task section
+	 * Creates a new TaskList instance
+	 * @param options Configuration options for the task list
 	 */
-	constructor(options: TaskSectionParameterObject) {
+	constructor(options: TaskListParameterObject) {
 		super(options);
 
 		this.tasks = options.tasks;
@@ -344,8 +344,8 @@ export class TaskSectionE extends g.E {
 	 * @param task The task data for the executed task
 	 */
 	private handleTaskExecute(task: TaskData): void {
-		// Check if there's an external handler for this task (like profile)
-		if (this.onTaskExecute && task.id === "profile") {
+		// Check if there's an external handler for this task (like profile or SNS)
+		if (this.onTaskExecute && (task.id === "profile" || task.id === "sns")) {
 			this.onTaskExecute(task);
 			return;
 		}

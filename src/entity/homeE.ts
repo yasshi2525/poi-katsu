@@ -1,11 +1,12 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
 import { ScoreBroadcaster } from "../model/scoreBroadcaster";
-import { AppNavigationSectionE } from "./appNavigationSectionE";
-import { BannerSectionE, BannerData } from "./bannerSectionE";
-import { HeaderSectionE } from "./headerSectionE";
+import { AdBannerE, BannerData } from "./adBannerE";
+import { AppListE } from "./appListE";
+import { ModalE } from "./modalE";
+import { PointDisplayE } from "./pointDisplayE";
 import { ProfileEditorE } from "./profileEditorE";
-import { TaskSectionE, TaskData } from "./taskSectionE";
-import { TimelineSectionE } from "./timelineSectionE";
+import { TaskListE, TaskData } from "./taskListE";
+import { TimelineE } from "./timelineE";
 
 
 /**
@@ -17,6 +18,11 @@ const ANIMATION_CONFIG = {
 	ACHIEVEMENT_SLIDE_DURATION: 500,
 	ACHIEVEMENT_DISPLAY_DURATION: 2000,
 	ACHIEVEMENT_POSITION_FROM_RIGHT: 320,
+	TIMELINE_FADE_IN_DURATION: 800,
+	TIMELINE_SLIDE_UP_DURATION: 600,
+	SNS_ACHIEVEMENT_POSITION_FROM_RIGHT: 370, // Position for SNS achievement notification
+	SNS_ACHIEVEMENT_Y_OFFSET: 150, // Y position offset for SNS notification
+	MODAL_CLOSE_DELAY: 50, // Delay before timeline reveal to ensure modal is closed
 } as const;
 
 /**
@@ -34,21 +40,23 @@ export interface HomeParameterObject extends g.EParameterObject {
  * Includes score, promotional banner, task list, timeline, and app navigation
  */
 export class HomeE extends g.E {
-	static assetIds: string[] = [...HeaderSectionE.assetIds, ...TaskSectionE.assetIds];
+	static assetIds: string[] = [...PointDisplayE.assetIds, ...TaskListE.assetIds];
 
 	// Component sections
-	private headerSection!: HeaderSectionE;
-	private bannerSection!: BannerSectionE;
-	private taskSection!: TaskSectionE;
-	private timelineSection!: TimelineSectionE;
-	private appNavigationSection!: AppNavigationSectionE;
+	private pointDisplay!: PointDisplayE;
+	private adBanner!: AdBannerE;
+	private taskList!: TaskListE;
+	private timeline!: TimelineE;
+	private appList!: AppListE;
 	private profileEditor?: ProfileEditorE;
 	private scoreBroadcaster?: ScoreBroadcaster;
+	private currentModal?: ModalE<string>;
 
 	// Screen state
 	private readonly screenWidth: number;
 	private readonly screenHeight: number;
 	private isProfileEditorVisible: boolean = false;
+	private isTimelineVisible: boolean = false;
 
 	// Task data
 	private readonly tasks: TaskData[] = [
@@ -143,7 +151,7 @@ export class HomeE extends g.E {
 	 * @returns Current score
 	 */
 	getScore(): number {
-		return this.headerSection.getScore();
+		return this.pointDisplay.getScore();
 	}
 
 	/**
@@ -151,15 +159,15 @@ export class HomeE extends g.E {
 	 * @param points Points to add
 	 */
 	addScore(points: number): void {
-		const currentScore = this.headerSection.getScore();
+		const currentScore = this.pointDisplay.getScore();
 		const newScore = currentScore + points;
 
 		// Update game vars to keep score synchronized
 		const gameVars = this.scene.game.vars as GameVars;
 		gameVars.gameState.score = newScore;
 
-		// Update header section
-		this.headerSection.setScore(newScore);
+		// Update point display
+		this.pointDisplay.setScore(newScore);
 
 		// Broadcast score to other participants
 		if (this.scoreBroadcaster) {
@@ -173,7 +181,7 @@ export class HomeE extends g.E {
 	 */
 	setTime(remainFrame: number): void {
 		const newRemainSecond = Math.floor(remainFrame / this.scene.game.fps);
-		this.headerSection.setTime(newRemainSecond);
+		this.pointDisplay.setTime(newRemainSecond);
 	}
 
 	/**
@@ -181,7 +189,7 @@ export class HomeE extends g.E {
 	 * @param bannerId The ID of the banner to show
 	 */
 	switchToBanner(bannerId: string): void {
-		this.bannerSection.switchToBanner(bannerId);
+		this.adBanner.switchToBanner(bannerId);
 	}
 
 	/**
@@ -189,23 +197,23 @@ export class HomeE extends g.E {
 	 * @param currentBannerId Current banner ID to find the next one
 	 */
 	switchToNextBanner(currentBannerId?: string): void {
-		this.bannerSection.switchToNextBanner(currentBannerId);
+		this.adBanner.switchToNextBanner(currentBannerId);
 	}
 
 	/**
-	 * Gets the banner section component (for testing)
-	 * @returns Banner section component
+	 * Gets the ad banner component (for testing)
+	 * @returns Ad banner component
 	 */
-	getBannerSection(): BannerSectionE {
-		return this.bannerSection;
+	getAdBanner(): AdBannerE {
+		return this.adBanner;
 	}
 
 	/**
-	 * Gets the task section component (for testing)
-	 * @returns Task section component
+	 * Gets the task list component (for testing)
+	 * @returns Task list component
 	 */
-	getTaskSection(): TaskSectionE {
-		return this.taskSection;
+	getTaskList(): TaskListE {
+		return this.taskList;
 	}
 
 
@@ -213,27 +221,27 @@ export class HomeE extends g.E {
 	 * Creates all component sections
 	 */
 	private createComponents(width: number, height: number, score: number, remainingSec: number): void {
-		// Create header section (full screen, positioned internally)
-		this.headerSection = new HeaderSectionE({
+		// Create point display (full screen, positioned internally)
+		this.pointDisplay = new PointDisplayE({
 			scene: this.scene,
 			width: width,
 			height: height,
 			score: score,
 			remainingSec: remainingSec
 		});
-		this.append(this.headerSection);
+		this.append(this.pointDisplay);
 
-		// Create banner section (full screen, positioned internally)
-		this.bannerSection = new BannerSectionE({
+		// Create ad banner (full screen, positioned internally)
+		this.adBanner = new AdBannerE({
 			scene: this.scene,
 			width: width,
 			height: height,
 			banners: this.banners
 		});
-		this.append(this.bannerSection);
+		this.append(this.adBanner);
 
-		// Create task section (full screen, positioned internally)
-		this.taskSection = new TaskSectionE({
+		// Create task list (full screen, positioned internally)
+		this.taskList = new TaskListE({
 			scene: this.scene,
 			width: width,
 			height: height,
@@ -241,23 +249,25 @@ export class HomeE extends g.E {
 			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
 			onTaskComplete: (taskData: TaskData) => this.addScore(taskData.rewardPoints)
 		});
-		this.append(this.taskSection);
+		this.append(this.taskList);
 
-		// Create timeline section (full screen, positioned internally)
-		this.timelineSection = new TimelineSectionE({
+		// Create timeline (full screen, positioned internally, initially hidden)
+		this.timeline = new TimelineE({
+			scene: this.scene,
+			width: width,
+			height: height,
+			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
+		});
+		this.timeline.hide();
+		this.append(this.timeline);
+
+		// Create app list (full screen, positioned internally)
+		this.appList = new AppListE({
 			scene: this.scene,
 			width: width,
 			height: height
 		});
-		this.append(this.timelineSection);
-
-		// Create app navigation section (full screen, positioned internally)
-		this.appNavigationSection = new AppNavigationSectionE({
-			scene: this.scene,
-			width: width,
-			height: height
-		});
-		this.append(this.appNavigationSection);
+		this.append(this.appList);
 	}
 
 	/**
@@ -276,10 +286,21 @@ export class HomeE extends g.E {
 	private onTaskExecute(taskData: TaskData): void {
 		if (taskData.id === "profile") {
 			this.switchToProfileEditor();
+		} else if (taskData.id === "sns") {
+			this.handleSnsTaskExecution(taskData);
 		} else {
 			// For other tasks, use the default modal behavior
 			// This will be handled by the task section itself
 		}
+	}
+
+	/**
+	 * Handles SNS task execution with timeline unlock
+	 * @param taskData The SNS task data
+	 */
+	private handleSnsTaskExecution(taskData: TaskData): void {
+		// Show modal explaining timeline feature
+		this.showTimelineUnlockModal(taskData);
 	}
 
 	/**
@@ -354,20 +375,20 @@ export class HomeE extends g.E {
 	 */
 	private getHomeSections(): g.E[] {
 		return [
-			this.headerSection,
-			this.bannerSection,
-			this.taskSection,
-			this.timelineSection,
-			this.appNavigationSection
+			this.pointDisplay,
+			this.adBanner,
+			this.taskList,
+			this.timeline,
+			this.appList
 		];
 	}
 
 	/**
-	 * Updates the header section with current profile data from gameVars
+	 * Updates the point display with current profile data from gameVars
 	 */
 	private updateHeaderWithCurrentProfile(): void {
 		const gameVars = this.scene.game.vars as GameVars;
-		this.headerSection.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
+		this.pointDisplay.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
 	}
 
 	/**
@@ -376,8 +397,8 @@ export class HomeE extends g.E {
 	private completeProfileTask(): void {
 		const profileTask = this.tasks.find(task => task.id === "profile");
 		if (profileTask && !profileTask.completed) {
-			// Use TaskSectionE's external completion method to handle visual removal
-			this.taskSection.completeTaskExternal("profile");
+			// Use TaskListE's external completion method to handle visual removal
+			this.taskList.completeTaskExternal("profile");
 			// Show achievement effect for profile completion
 			this.showAchievementEffect(profileTask);
 		}
@@ -460,6 +481,163 @@ export class HomeE extends g.E {
 				// Unknown banner, just switch
 				this.switchToNextBanner(bannerId);
 				break;
+		}
+	}
+
+	/**
+	 * Shows modal explaining timeline feature unlock
+	 * @param taskData The SNS task data
+	 */
+	private showTimelineUnlockModal(taskData: TaskData): void {
+		// Close any existing modal first
+		if (this.currentModal) {
+			this.closeModal();
+		}
+
+		const modalMessage = "SNSと連携しました！\n\nタイムライン機能が利用可能になりました。\n他のユーザーの投稿を見て、いいねやコメントでポイントを獲得しましょう！";
+
+		this.currentModal = new ModalE({
+			scene: this.scene,
+			name: "timelineUnlockModal",
+			args: taskData.id,
+			title: "タイムライン機能解放！",
+			message: modalMessage,
+			width: 500,
+			height: 300,
+			onClose: () => this.closeModal(),
+		});
+
+		// Add OK button to modal
+		this.addTimelineModalButton(taskData);
+
+		// Append modal to scene to ensure it's always on top
+		if (this.currentModal) {
+			this.scene.append(this.currentModal);
+		}
+	}
+
+	/**
+	 * Adds OK button to timeline unlock modal by replacing the close button
+	 * @param taskData The task data for the button
+	 */
+	private addTimelineModalButton(taskData: TaskData): void {
+		if (!this.currentModal) return;
+
+		// Replace close button with custom OK button
+		// Use the original close button position (bottom right of modal)
+		this.currentModal.replaceCloseButton({
+			text: "OK",
+			backgroundColor: "#27ae60",
+			textColor: "white",
+			fontSize: 14,
+			width: 80,
+			height: 35,
+			// Don't override x,y - use the original close button position
+			onComplete: () => {
+				this.completeSnsTask(taskData);
+			}
+		});
+	}
+
+	/**
+	 * Completes SNS task and reveals timeline
+	 * @param taskData The SNS task data
+	 */
+	private completeSnsTask(taskData: TaskData): void {
+		// Mark task as completed
+		this.taskList.completeTaskExternal(taskData.id);
+
+		// Add score reward
+		this.addScore(taskData.rewardPoints);
+
+		// Show timeline reveal animation with delay to ensure modal is properly closed
+		this.scene.setTimeout(() => {
+			this.revealTimeline();
+		}, ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
+
+		// Show achievement notification
+		this.showSnsRewardNotification(taskData);
+	}
+
+	/**
+	 * Reveals timeline with fade-in animation
+	 */
+	private revealTimeline(): void {
+		if (this.isTimelineVisible) return;
+
+		this.isTimelineVisible = true;
+
+		// Make timeline visible first
+		this.timeline.show();
+
+		// Create animation timeline for fade-in effect
+		const timeline = new Timeline(this.scene);
+
+		// Fade in the timeline
+		timeline.create(this.timeline)
+			.to({
+				opacity: 1
+			}, ANIMATION_CONFIG.TIMELINE_FADE_IN_DURATION);
+	}
+
+	/**
+	 * Shows SNS reward notification
+	 * @param taskData The completed SNS task
+	 */
+	private showSnsRewardNotification(taskData: TaskData): void {
+		// Create achievement notification that slides in from the right
+		const achievementNotification = new g.E({
+			scene: this.scene,
+			x: this.screenWidth, // Start off-screen to the right
+			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET, // Position below existing notifications
+		});
+
+		// Background for notification
+		const notificationBg = new g.FilledRect({
+			scene: this.scene,
+			width: 350,
+			height: 80,
+			x: 0,
+			y: 0,
+			cssColor: "#3498db", // Blue color for SNS
+		});
+		achievementNotification.append(notificationBg);
+
+		// Achievement text
+		const achievementText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 14,
+				fontColor: "white",
+			}),
+			text: `SNS連携完了！ +${taskData.rewardPoints}pt\nタイムライン機能が利用可能に！`,
+			x: 10,
+			y: 15,
+		});
+		achievementNotification.append(achievementText);
+
+		this.append(achievementNotification);
+
+		// Animate notification: slide in, wait, slide out
+		const timeline = new Timeline(this.scene);
+		timeline.create(achievementNotification)
+			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for SNS
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.call(() => {
+				achievementNotification.destroy();
+			});
+	}
+
+	/**
+	 * Closes the current modal
+	 */
+	private closeModal(): void {
+		if (this.currentModal) {
+			this.currentModal.destroy();
+			this.currentModal = undefined;
 		}
 	}
 }

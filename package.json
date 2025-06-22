@@ -14,7 +14,7 @@
     "lint": "eslint . --fix",
     "start": "akashic sandbox .",
     "start:watch": "akashic sandbox . --watch",
-    "start:multi": "akashic serve",
+    "start:multi": "akashic serve -s nicolive",
     "start:multi:watch": "akashic serve --watch",
     "export-zip": "rimraf game.zip && akashic export zip -o game.zip --nicolive",
     "export-html": "rimraf game && akashic export html -o game",

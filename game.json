@@ -101,31 +101,6 @@
 			"path": "script/entity/homeE.js",
 			"global": true
 		},
-		"appNavigationSectionE": {
-			"type": "script",
-			"path": "script/entity/appNavigationSectionE.js",
-			"global": true
-		},
-		"bannerSectionE": {
-			"type": "script",
-			"path": "script/entity/bannerSectionE.js",
-			"global": true
-		},
-		"headerSectionE": {
-			"type": "script",
-			"path": "script/entity/headerSectionE.js",
-			"global": true
-		},
-		"taskSectionE": {
-			"type": "script",
-			"path": "script/entity/taskSectionE.js",
-			"global": true
-		},
-		"timelineSectionE": {
-			"type": "script",
-			"path": "script/entity/timelineSectionE.js",
-			"global": true
-		},
 		"profileEditorE": {
 			"type": "script",
 			"path": "script/entity/profileEditorE.js",
@@ -139,6 +114,31 @@
 		"scoreBroadcaster": {
 			"type": "script",
 			"path": "script/model/scoreBroadcaster.js",
+			"global": true
+		},
+		"adBannerE": {
+			"type": "script",
+			"path": "script/entity/adBannerE.js",
+			"global": true
+		},
+		"appListE": {
+			"type": "script",
+			"path": "script/entity/appListE.js",
+			"global": true
+		},
+		"pointDisplayE": {
+			"type": "script",
+			"path": "script/entity/pointDisplayE.js",
+			"global": true
+		},
+		"taskListE": {
+			"type": "script",
+			"path": "script/entity/taskListE.js",
+			"global": true
+		},
+		"timelineE": {
+			"type": "script",
+			"path": "script/entity/timelineE.js",
 			"global": true
 		}
 	},

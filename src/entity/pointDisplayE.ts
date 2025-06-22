@@ -12,9 +12,9 @@ interface LayoutConfig {
 }
 
 /**
- * Parameter object for HeaderSection
+ * Parameter object for PointDisplay
  */
-export interface HeaderSectionParameterObject extends g.EParameterObject {
+export interface PointDisplayParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -28,7 +28,7 @@ export interface HeaderSectionParameterObject extends g.EParameterObject {
 /**
  * Header section component that displays score and time
  */
-export class HeaderSectionE extends g.E {
+export class PointDisplayE extends g.E {
 	static assetIds: string[] = [...NumberE.assetIds];
 
 	private score: number;
@@ -48,10 +48,10 @@ export class HeaderSectionE extends g.E {
 	private playerNameLabel?: g.Label;
 
 	/**
-	 * Creates a new HeaderSection instance
-	 * @param options Configuration options for the header section
+	 * Creates a new PointDisplay instance
+	 * @param options Configuration options for the point display
 	 */
-	constructor(options: HeaderSectionParameterObject) {
+	constructor(options: PointDisplayParameterObject) {
 		super(options);
 
 		this.score = options.score;
