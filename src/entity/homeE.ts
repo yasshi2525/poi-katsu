@@ -1,14 +1,18 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { ItemData } from "../data/itemData";
+import { TaskData } from "../data/taskData";
+import { ItemManager } from "../manager/itemManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
 import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AdBannerE, BannerData } from "./adBannerE";
 import { AppListE } from "./appListE";
 import { HeaderE } from "./headerE";
+import { ItemListE } from "./itemListE";
 import { ModalE } from "./modalE";
 import { PointDisplayE } from "./pointDisplayE";
 import { ProfileEditorE } from "./profileEditorE";
 import { ShopE } from "./shopE";
-import { TaskListE, TaskData } from "./taskListE";
+import { TaskListE } from "./taskListE";
 import { TimelineE } from "./timelineE";
 
 
@@ -53,13 +57,15 @@ export class HomeE extends g.E {
 	private taskList!: TaskListE;
 	private timeline!: TimelineE;
 	private appList!: AppListE;
+	private itemList!: ItemListE;
 	private profileEditor?: ProfileEditorE;
 	private shop?: ShopE;
 	private scoreBroadcaster?: ScoreBroadcaster;
 	private currentModal?: ModalE<string>;
 
-	// Task management
+	// Management systems
 	private taskManager!: TaskManager;
+	private itemManager!: ItemManager;
 
 	// Screen state
 	private readonly screenWidth: number;
@@ -126,7 +132,8 @@ export class HomeE extends g.E {
 		const remainingSec = gameVars.totalTimeLimit;
 		const score = gameVars.gameState.score;
 
-		// Initialize TaskManager with execution context
+		// Initialize managers
+		this.initializeItemManager();
 		this.initializeTaskManager();
 
 		this.createComponents(options.width, options.height, score, remainingSec);
@@ -205,6 +212,13 @@ export class HomeE extends g.E {
 
 
 	/**
+	 * Initializes ItemManager
+	 */
+	private initializeItemManager(): void {
+		this.itemManager = new ItemManager();
+	}
+
+	/**
 	 * Initializes TaskManager with execution context
 	 */
 	private initializeTaskManager(): void {
@@ -242,48 +256,58 @@ export class HomeE extends g.E {
 	private createComponents(width: number, height: number, score: number, remainingSec: number): void {
 		// Note: header is created at scene level, not here
 
-		// Create ad banner (adjusted for header)
+		// Create ad banner (adjusted for header and item list)
 		this.adBanner = new AdBannerE({
 			scene: this.scene,
 			width: width,
-			height: height - 80,
+			height: height - 140, // Reduced by item list height
 			banners: this.banners,
-			y: 80
+			y: 140 // Below header + item list
 		});
 		this.append(this.adBanner);
 
-		// Create task list (adjusted for header) - now using TaskManager's tasks
+		// Create task list (adjusted for header and item list) - now using TaskManager's tasks
 		this.taskList = new TaskListE({
 			scene: this.scene,
 			width: width,
-			height: height - 80,
+			height: height - 140, // Reduced by item list height
 			tasks: this.taskManager.getTasks(),
 			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
 			onTaskComplete: () => { /* Score addition is now handled by TaskManager */ },
-			y: 80
+			y: 140 // Below header + item list
 		});
 		this.append(this.taskList);
 
-		// Create timeline (adjusted for header, initially hidden)
+		// Create timeline (adjusted for header and item list, initially hidden)
 		this.timeline = new TimelineE({
 			scene: this.scene,
 			width: width,
-			height: height - 80,
+			height: height - 140, // Reduced by item list height
 			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
-			y: 80
+			y: 140 // Below header + item list
 		});
 		this.timeline.hide();
 		this.append(this.timeline);
 
-		// Create app list (adjusted for header)
+		// Create app list (adjusted for header and item list)
 		this.appList = new AppListE({
 			scene: this.scene,
 			width: width,
-			height: height - 80,
+			height: height - 140, // Reduced by item list height
 			onShopClick: () => this.switchToShop(),
-			y: 80
+			y: 140 // Below header + item list
 		});
 		this.append(this.appList);
+
+		// Create item list (positioned right below header)
+		this.itemList = new ItemListE({
+			scene: this.scene,
+			width: width,
+			height: 60, // Compact height for horizontal layout
+			itemManager: this.itemManager,
+			y: 80 // Right below header
+		});
+		this.append(this.itemList);
 	}
 
 	/**
@@ -387,7 +411,8 @@ export class HomeE extends g.E {
 			this.adBanner,
 			this.taskList,
 			this.timeline,
-			this.appList
+			this.appList,
+			this.itemList
 		];
 	}
 
@@ -573,6 +598,10 @@ export class HomeE extends g.E {
 				height: this.screenHeight,
 				x: this.screenWidth, // Start off-screen to the right
 				y: 0,
+				itemManager: this.itemManager,
+				onCheckPoints: () => this.getScore(),
+				onDeductPoints: (amount: number) => this.addScore(-amount),
+				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
 				onBack: () => this.switchBackFromShop()
 			});
 			this.append(this.shop);
@@ -670,6 +699,15 @@ export class HomeE extends g.E {
 			.call(() => {
 				achievementNotification.destroy();
 			});
+	}
+
+	/**
+	 * Handles item purchase completion
+	 * @param _item The purchased item (unused but required for callback interface)
+	 */
+	private onItemPurchased(_item: ItemData): void {
+		// Refresh item list to show newly purchased item
+		this.itemList.refreshItems();
 	}
 
 	/**

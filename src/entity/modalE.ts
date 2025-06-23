@@ -145,37 +145,79 @@ export class ModalE<T> extends g.E {
 		y?: number;
 		onComplete?: () => void;
 	}): void {
+		// For backward compatibility, treat single button as array with one element
+		this.replaceCloseButtons([options]);
+	}
+
+	/**
+	 * Replaces the close button with multiple custom buttons while maintaining proper closing behavior
+	 * @param buttonsOptions Array of configuration options for the buttons
+	 */
+	replaceCloseButtons(buttonsOptions: Array<{
+		text: string;
+		backgroundColor?: string;
+		textColor?: string;
+		fontSize?: number;
+		width?: number;
+		height?: number;
+		x?: number;
+		y?: number;
+		onComplete?: () => void;
+	}>): void {
 		// Remove the existing close button
 		this.content.remove(this._closeButton);
 
-		// Create new close button with custom styling but same core functionality
-		const newCloseButton = new LabelButtonE({
-			scene: this.scene,
-			name: this._closeButton.name + "_replaced",
-			args: this._closeButton.msgArgs,
-			text: options.text,
-			width: options.width || 80,
-			height: options.height || 30,
-			x: options.x !== undefined ? options.x : this._closeButton.x,
-			y: options.y !== undefined ? options.y : this._closeButton.y,
-			backgroundColor: options.backgroundColor,
-			textColor: options.textColor,
-			fontSize: options.fontSize,
-			onComplete: (args) => {
-				// Execute custom completion logic first
-				if (options.onComplete) {
-					options.onComplete();
+		if (buttonsOptions.length === 0) {
+			return;
+		}
+
+		// Create buttons with automatic positioning if not specified
+		const buttonSpacing = 10;
+		const defaultButtonWidth = 80;
+		const defaultButtonHeight = 30;
+		const totalButtonsWidth = buttonsOptions.length * defaultButtonWidth + (buttonsOptions.length - 1) * buttonSpacing;
+		const startX = (this.content.width - totalButtonsWidth) / 2;
+
+		buttonsOptions.forEach((buttonOptions, index) => {
+			const buttonX = buttonOptions.x !== undefined ?
+				buttonOptions.x :
+				startX + (index * (defaultButtonWidth + buttonSpacing));
+
+			const buttonY = buttonOptions.y !== undefined ?
+				buttonOptions.y :
+				this.content.height - 50;
+
+			const button = new LabelButtonE({
+				scene: this.scene,
+				name: `${this._closeButton.name}_button_${index}`,
+				args: this._closeButton.msgArgs,
+				text: buttonOptions.text,
+				width: buttonOptions.width || defaultButtonWidth,
+				height: buttonOptions.height || defaultButtonHeight,
+				x: buttonX,
+				y: buttonY,
+				backgroundColor: buttonOptions.backgroundColor,
+				textColor: buttonOptions.textColor,
+				fontSize: buttonOptions.fontSize,
+				onComplete: (args) => {
+					// Execute custom completion logic first
+					if (buttonOptions.onComplete) {
+						buttonOptions.onComplete();
+					}
+					// Then destroy the modal (same as original behavior)
+					this.destroy();
 				}
-				// Then destroy the modal (same as original behavior)
-				this.destroy();
+			});
+
+			this.content.append(button);
+
+			// Set the first button as the primary close button for overlay click handling
+			if (index === 0) {
+				this._closeButton = button;
 			}
 		});
 
-		// Replace the reference and append to content
-		this._closeButton = newCloseButton;
-		this.content.append(newCloseButton);
-
-		// Re-setup sync state handling for the new button
+		// Re-setup sync state handling for the primary button
 		this.setupSyncStateHandling();
 	}
 

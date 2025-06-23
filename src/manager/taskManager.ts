@@ -1,5 +1,5 @@
+import { TaskData } from "../data/taskData";
 import { ModalE } from "../entity/modalE";
-import { TaskData } from "../entity/taskListE";
 
 /**
  * Task execution context interface

@@ -155,6 +155,56 @@
 			"type": "script",
 			"path": "script/manager/taskManager.js",
 			"global": true
+		},
+		"itemListE": {
+			"type": "script",
+			"path": "script/entity/itemListE.js",
+			"global": true
+		},
+		"itemManager": {
+			"type": "script",
+			"path": "script/manager/itemManager.js",
+			"global": true
+		},
+		"playerData": {
+			"type": "script",
+			"path": "script/data/playerData.js",
+			"global": true
+		},
+		"taskData": {
+			"type": "script",
+			"path": "script/data/taskData.js",
+			"global": true
+		},
+		"itemData": {
+			"type": "script",
+			"path": "script/data/itemData.js",
+			"global": true
+		},
+		"notificationData": {
+			"type": "script",
+			"path": "script/data/notificationData.js",
+			"global": true
+		},
+		"gameContext": {
+			"type": "script",
+			"path": "script/data/gameContext.js",
+			"global": true
+		},
+		"gamePhaseManager": {
+			"type": "script",
+			"path": "script/manager/gamePhaseManager.js",
+			"global": true
+		},
+		"pointManager": {
+			"type": "script",
+			"path": "script/manager/pointManager.js",
+			"global": true
+		},
+		"notificationManager": {
+			"type": "script",
+			"path": "script/manager/notificationManager.js",
+			"global": true
 		}
 	},
 	"environment": {

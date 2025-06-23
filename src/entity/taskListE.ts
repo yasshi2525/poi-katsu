@@ -1,4 +1,5 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { TaskData } from "../data/taskData";
 import { LabelButtonE } from "./labelButtonE";
 import { ModalE } from "./modalE";
 
@@ -11,18 +12,6 @@ interface LayoutConfig {
 	width: number;
 	height: number;
 	children?: { [key: string]: LayoutConfig };
-}
-
-/**
- * Task data interface
- */
-export interface TaskData {
-	icon: string;
-	title: string;
-	reward: string;
-	rewardPoints: number;
-	id: string;
-	completed: boolean;
 }
 
 /**
@@ -393,39 +382,31 @@ export class TaskListE extends g.E {
 	private addModalButtons(task: TaskData): void {
 		if (!this.currentModal) return;
 
-		// Confirm button
-		const confirmBtn = new LabelButtonE({
-			scene: this.scene,
-			name: `confirmTask_${task.id}`,
-			args: task.id,
-			width: 100,
-			height: 35,
-			x: 50,
-			y: 180,
-			text: "実行",
-			backgroundColor: "#27ae60",
-			textColor: "white",
-			fontSize: 14,
-			onComplete: (taskId: string) => this.executeTask(taskId),
-		});
-		this.currentModal.content.append(confirmBtn);
-
-		// Cancel button
-		const cancelBtn = new LabelButtonE({
-			scene: this.scene,
-			name: `cancelTask_${task.id}`,
-			args: task.id, // Primitive string - safe to serialize
-			width: 100,
-			height: 35,
-			x: 170,
-			y: 180,
-			text: "キャンセル",
-			backgroundColor: "#95a5a6",
-			textColor: "white",
-			fontSize: 14,
-			onComplete: () => this.closeModal(),
-		});
-		this.currentModal.content.append(cancelBtn);
+		// Use new multi-button API instead of manual appending
+		this.currentModal.replaceCloseButtons([
+			{
+				text: "キャンセル",
+				backgroundColor: "#95a5a6",
+				textColor: "white",
+				fontSize: 14,
+				width: 100,
+				height: 35,
+				onComplete: () => {
+					// Modal closes automatically after onComplete
+				}
+			},
+			{
+				text: "実行",
+				backgroundColor: "#27ae60",
+				textColor: "white",
+				fontSize: 14,
+				width: 100,
+				height: 35,
+				onComplete: () => {
+					this.executeTask(task.id);
+				}
+			}
+		]);
 	}
 
 	/**
@@ -471,26 +452,19 @@ export class TaskListE extends g.E {
 			onClose: () => this.closeModal(),
 		});
 
-		// Add OK button
-		const okBtn = new LabelButtonE({
-			scene: this.scene,
-			name: `okTask_${task.id}`,
-			args: task.id,
-			width: 80,
-			height: 30,
-			x: 160,
-			y: 140,
+		// Use new multi-button API instead of manual appending
+		this.currentModal.replaceCloseButton({
 			text: "OK",
 			backgroundColor: "#3498db",
 			textColor: "white",
 			fontSize: 14,
-			onComplete: (taskId: string) => {
-				this.closeModal();
+			width: 80,
+			height: 30,
+			onComplete: () => {
 				// Start fade out animation after modal closes
-				this.fadeOutAndRemoveTask(taskId);
-			},
+				this.fadeOutAndRemoveTask(task.id);
+			}
 		});
-		this.currentModal.content.append(okBtn);
 
 		// Append modal to scene to ensure it's always on top
 		if (this.currentModal) {

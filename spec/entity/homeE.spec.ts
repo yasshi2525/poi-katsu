@@ -169,7 +169,8 @@ describe("HomeE", () => {
 		 */
 		const findModalReplacedButton = (modal: ModalE<any>): LabelButtonE<any> | null => {
 			const findButton = (entity: g.E): LabelButtonE<any> | null => {
-				if (entity instanceof LabelButtonE && entity.name.includes("_replaced")) {
+				if (entity instanceof LabelButtonE
+					&& (entity.name.includes("_replaced") || entity.name.includes("_button_"))) {
 					return entity;
 				}
 				if (entity.children) {
