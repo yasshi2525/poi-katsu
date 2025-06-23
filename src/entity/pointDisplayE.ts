@@ -72,6 +72,14 @@ export class PointDisplayE extends g.E {
 	}
 
 	/**
+	 * Gets the current remaining time
+	 * @returns Remaining time in seconds
+	 */
+	getRemainingTime(): number {
+		return this.remainingSec;
+	}
+
+	/**
 	 * Sets the score value and updates display
 	 * @param score New score value
 	 */

@@ -172,4 +172,10 @@ export class ItemManager {
 		this.ownedItems.set(itemId, ownedItem);
 		return true;
 	}
+
+	addItemDataForTesting(itemData: ItemData): void {
+		if (!this.availableItems.some(item => item.id === itemData.id)) {
+			this.availableItems.push(itemData);
+		}
+	}
 }

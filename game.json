@@ -205,6 +205,21 @@
 			"type": "script",
 			"path": "script/manager/notificationManager.js",
 			"global": true
+		},
+		"sharedPostData": {
+			"type": "script",
+			"path": "script/data/sharedPostData.js",
+			"global": true
+		},
+		"affiliateConfig": {
+			"type": "script",
+			"path": "script/config/affiliateConfig.js",
+			"global": true
+		},
+		"affiliateMessages": {
+			"type": "script",
+			"path": "script/data/affiliateMessages.js",
+			"global": true
 		}
 	},
 	"environment": {

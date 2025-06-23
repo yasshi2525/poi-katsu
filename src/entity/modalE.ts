@@ -52,7 +52,7 @@ export class ModalE<T> extends g.E {
 			width: options.scene.game.width,
 			height: options.scene.game.height,
 			touchable: true,
-			local: true
+			local: true,
 		});
 		this.append(this.overlay);
 

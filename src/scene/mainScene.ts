@@ -1,4 +1,6 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { AffiliateBroadcastMessage, AffiliatePurchaseMessage } from "../data/affiliateMessages";
+import { SharedPostData } from "../data/sharedPostData";
 import { AgreementE } from "../entity/agreementE";
 import { HeaderE } from "../entity/headerE";
 import { HomeE } from "../entity/homeE";
@@ -98,7 +100,54 @@ export class MainScene extends BaseScene {
 						gameVars.allPlayersScores[scoreData.playerId] = scoreData.score;
 					}
 				}
+
+				// Handle affiliate post sharing broadcasts
+				if (ev.data?.type === "affiliatePostShared" && ev.data?.affiliateData) {
+					const affiliateData = ev.data.affiliateData as AffiliateBroadcastMessage;
+					if (affiliateData.playerId && affiliateData.playerId !== this.game.selfId) {
+						// Add shared post to other players' timelines
+						this.addSharedPostToTimeline(affiliateData.sharedPost);
+					}
+				}
+
+				// Handle affiliate purchase notifications
+				if (ev.data?.type === "affiliatePurchase" && ev.data?.purchaseData) {
+					const purchaseData = ev.data.purchaseData as AffiliatePurchaseMessage;
+					if (purchaseData.sharerId === this.game.selfId) {
+						// Reward the sharer with affiliate points
+						this.awardAffiliateReward(purchaseData.rewardPoints);
+					}
+					// Update purchase count for all players
+					this.updateAffiliatePurchaseCount(purchaseData.postId);
+				}
 			});
+		}
+	}
+
+	/**
+	 * Adds a shared post to the timeline for all players
+	 */
+	private addSharedPostToTimeline(sharedPost: SharedPostData): void {
+		if (this.home) {
+			this.home.addSharedPostToTimeline(sharedPost);
+		}
+	}
+
+	/**
+	 * Awards affiliate reward points to the current player
+	 */
+	private awardAffiliateReward(rewardPoints: number): void {
+		if (this.home) {
+			this.home.awardAffiliateReward(rewardPoints);
+		}
+	}
+
+	/**
+	 * Updates the purchase count for an affiliate post
+	 */
+	private updateAffiliatePurchaseCount(postId: string): void {
+		if (this.home) {
+			this.home.updateAffiliatePurchaseCount(postId);
 		}
 	}
 

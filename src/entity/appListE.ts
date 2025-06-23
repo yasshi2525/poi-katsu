@@ -252,6 +252,7 @@ export class AppListE extends g.E {
 			y: y + backgroundLayout.y,
 			cssColor: app.color,
 			touchable: true,
+			local: true,
 		});
 
 		// Add click handler for shop app

@@ -1,3 +1,4 @@
+import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { ItemData } from "../data/itemData";
 import { ItemManager } from "../manager/itemManager";
 import { LabelButtonE } from "./labelButtonE";
@@ -14,9 +15,9 @@ const SHOP_CONFIG = {
 	PRODUCT_GRID_BOTTOM_MARGIN: 200,
 
 	// Product layout
-	NOVEL_SPACING: 160,
-	MANGA_SPACING: 120,
-	MANGA_ROW_OFFSET: 220,
+	NOVEL_SPACING: 220, // Increased spacing for novels to prevent button overlap
+	MANGA_SPACING: 200, // Increased spacing for manga to prevent overlap
+	MANGA_ROW_OFFSET: 300, // Increased offset to prevent row overlap
 
 	// Modal constants
 	MODAL_WIDTH: 400,
@@ -68,6 +69,14 @@ export interface ShopParameterObject extends g.EParameterObject {
 	onItemPurchased: (item: ItemData) => void;
 	/** Callback when back button is pressed */
 	onBack?: () => void;
+	/** Callback to get remaining time for dynamic pricing */
+	onGetRemainingTime: () => number;
+	/** Callback to check if timeline is revealed for share button */
+	onIsTimelineRevealed: () => boolean;
+	/** Callback when share button is clicked */
+	onShareProduct?: (item: ItemData, sharedPrice: number) => void;
+	/** Callback when SNS connection is requested from disabled share button */
+	onSnsConnectionRequest?: () => void;
 }
 
 /**
@@ -81,8 +90,13 @@ export class ShopE extends g.E {
 	private readonly onDeductPoints: (amount: number) => void;
 	private readonly onItemPurchased: (item: ItemData) => void;
 	private readonly onBack?: () => void;
+	private readonly onGetRemainingTime: () => number;
+	private readonly onIsTimelineRevealed: () => boolean;
+	private readonly onShareProduct?: (item: ItemData, sharedPrice: number) => void;
+	private readonly onSnsConnectionRequest?: () => void;
 	private currentModal?: ModalE<string>;
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
+	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
 
 	/**
 	 * Creates a new Shop instance
@@ -96,8 +110,19 @@ export class ShopE extends g.E {
 		this.onDeductPoints = options.onDeductPoints;
 		this.onItemPurchased = options.onItemPurchased;
 		this.onBack = options.onBack;
+		this.onGetRemainingTime = options.onGetRemainingTime;
+		this.onIsTimelineRevealed = options.onIsTimelineRevealed;
+		this.onShareProduct = options.onShareProduct;
+		this.onSnsConnectionRequest = options.onSnsConnectionRequest;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
+	}
+
+	/**
+	 * Public method to refresh shop when timeline visibility changes
+	 */
+	refreshForTimelineReveal(): void {
+		this.refreshShopDisplay();
 	}
 
 	/**
@@ -112,7 +137,7 @@ export class ShopE extends g.E {
 			children: {
 				header: {
 					x: 0,
-					y: 0,
+					y: 0, // Position header at the top of shop content area (below main HeaderE)
 					width: screenWidth,
 					height: SHOP_CONFIG.HEADER_HEIGHT,
 					children: {
@@ -130,12 +155,13 @@ export class ShopE extends g.E {
 							x: 0,
 							y: 0,
 							width: (screenWidth - 80) / 2,
-							height: 200,
+							height: 240,
 							children: {
 								image: { x: 10, y: 10, width: 120, height: 120 },
 								name: { x: 10, y: 140, width: 120, height: 20 },
 								price: { x: 10, y: 165, width: 80, height: 20 },
-								buyButton: { x: 95, y: 160, width: 45, height: 30 }
+								buyButton: { x: 95, y: 160, width: 45, height: 30 },
+								shareButton: { x: 95, y: 200, width: 45, height: 30 }
 							}
 						}
 					}
@@ -148,13 +174,13 @@ export class ShopE extends g.E {
 	 * Creates the overall layout structure
 	 */
 	private createLayout(): void {
-		// Background
+		// Background (positioned below shop header)
 		const background = new g.FilledRect({
 			scene: this.scene,
 			width: this.layout.width,
-			height: this.layout.height,
+			height: this.layout.height - SHOP_CONFIG.HEADER_HEIGHT,
 			x: this.layout.x,
-			y: this.layout.y,
+			y: this.layout.y + SHOP_CONFIG.HEADER_HEIGHT, // Start below shop header
 			cssColor: SHOP_CONFIG.BACKGROUND_COLOR,
 		});
 		this.append(background);
@@ -195,6 +221,7 @@ export class ShopE extends g.E {
 			x: this.layout.x + backButtonLayout.x,
 			y: this.layout.y + backButtonLayout.y,
 			touchable: true,
+			local: true,
 		});
 		backButton.onPointDown.add(() => {
 			if (this.onBack) {
@@ -245,6 +272,40 @@ export class ShopE extends g.E {
 	}
 
 	/**
+	 * Calculates dynamic price based on remaining time
+	 * @param basePrice Base price of the item
+	 * @returns Dynamic price based on time remaining
+	 */
+	private calculateDynamicPrice(basePrice: number): number {
+		// Input validation
+		if (basePrice <= 0) {
+			console.warn(`Invalid base price: ${basePrice}, using default value 100`);
+			basePrice = 100;
+		}
+
+		const remainingTime = Math.max(0, this.onGetRemainingTime()); // Ensure non-negative
+		// Use scene.game.random for deterministic behavior
+		const randomMultiplier = this.scene.game.random.generate();
+
+		// Price fluctuates based on remaining time and random factor using config values
+		// Early game (high remaining time): more volatile pricing
+		// Late game (low remaining time): price stabilizes closer to base
+		const timeRatio = remainingTime / AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME;
+		const volatility = AFFILIATE_CONFIG.PRICING.VOLATILITY * Math.min(timeRatio, 1); // Cap timeRatio at 1
+		const priceVariation = (randomMultiplier - 0.5) * 2 * volatility; // -volatility to +volatility
+
+		// Calculate dynamic price with bounds checking
+		const minPrice = Math.floor(basePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+		const dynamicPrice = Math.max(
+			Math.floor(basePrice * (1 + priceVariation)),
+			minPrice
+		);
+
+		// Additional safety bounds checking
+		return Math.max(1, Math.min(dynamicPrice, basePrice * 2)); // Ensure price is between 1 and 2x base price
+	}
+
+	/**
 	 * Creates a single product card
 	 */
 	private createProductCard(item: ItemData, x: number, y: number): void {
@@ -253,6 +314,10 @@ export class ShopE extends g.E {
 		const nameLayout = productLayout.children!.name;
 		const priceLayout = productLayout.children!.price;
 		const buyButtonLayout = productLayout.children!.buyButton;
+		const shareButtonLayout = productLayout.children!.shareButton;
+
+		// Calculate dynamic price
+		const dynamicPrice = this.calculateDynamicPrice(item.purchasePrice);
 
 		// Product card background
 		const cardBg = new g.FilledRect({
@@ -294,7 +359,7 @@ export class ShopE extends g.E {
 		});
 		this.append(productName);
 
-		// Product price
+		// Product price (now dynamic)
 		const productPrice = new g.Label({
 			scene: this.scene,
 			font: new g.DynamicFont({
@@ -303,7 +368,7 @@ export class ShopE extends g.E {
 				size: 12,
 				fontColor: "#e74c3c",
 			}),
-			text: `${item.purchasePrice}pt`,
+			text: `${dynamicPrice}pt`,
 			x: x + priceLayout.x,
 			y: y + priceLayout.y,
 		});
@@ -318,7 +383,7 @@ export class ShopE extends g.E {
 		const buyButton = new LabelButtonE({
 			scene: this.scene,
 			name: `shop_buy_${item.id}`,
-			args: item.id,
+			args: `${item.id}_${dynamicPrice}`, // Include dynamic price in args
 			text: buttonText,
 			width: buyButtonLayout.width,
 			height: buyButtonLayout.height,
@@ -327,7 +392,7 @@ export class ShopE extends g.E {
 			backgroundColor: buttonColor,
 			textColor: "white",
 			fontSize: 10,
-			onComplete: (itemId: string) => this.handlePurchase(itemId)
+			onComplete: (args: string) => this.handlePurchase(args)
 		});
 
 		// Store button reference for reactivation
@@ -339,16 +404,67 @@ export class ShopE extends g.E {
 		}
 
 		this.append(buyButton);
+
+		// Share button (always visible but disabled if timeline not revealed)
+		const isTimelineRevealed = this.onIsTimelineRevealed();
+		const shareButton = new LabelButtonE({
+			scene: this.scene,
+			name: `shop_share_${item.id}`,
+			args: `${item.id}_${dynamicPrice}`,
+			text: "シェア",
+			width: shareButtonLayout.width,
+			height: shareButtonLayout.height,
+			x: x + shareButtonLayout.x,
+			y: y + shareButtonLayout.y,
+			backgroundColor: isTimelineRevealed ? "#3498db" : "#95a5a6", // Gray if disabled
+			textColor: isTimelineRevealed ? "white" : "#7f8c8d", // Darker gray text if disabled
+			fontSize: 10,
+			onComplete: (args: string) => isTimelineRevealed ? this.handleShare(args) : this.handleShareDisabled(args)
+		});
+
+		// Store share button reference
+		this.shareButtons.set(item.id, shareButton);
+		this.append(shareButton);
 	}
 
 	/**
 	 * Handles purchase button click
-	 * @param itemId The ID of the item to purchase
+	 * @param args The item ID and dynamic price (format: "itemId_price")
 	 */
-	private handlePurchase(itemId: string): void {
+	private handlePurchase(args: string): void {
+		// Split from the right to handle item IDs with underscores
+		const lastUnderscoreIndex = args.lastIndexOf("_");
+		if (lastUnderscoreIndex === -1) {
+			console.error(`Invalid button args format: ${args}`);
+			return;
+		}
+		const itemId = args.substring(0, lastUnderscoreIndex);
+		const priceStr = args.substring(lastUnderscoreIndex + 1);
+		const dynamicPrice = parseInt(priceStr, 10);
+
+		// Validate parsed price
+		if (isNaN(dynamicPrice) || dynamicPrice <= 0) {
+			console.error(`Invalid price in button args: ${priceStr}`);
+			return;
+		}
+
+		// Validate item ID is not empty
+		if (!itemId.trim()) {
+			console.error(`Empty item ID in button args: ${args}`);
+			return;
+		}
+
 		const item = this.itemManager.getItem(itemId);
 		if (!item) {
 			console.error(`Item not found: ${itemId}`);
+			return;
+		}
+
+		// Validate dynamic price is within reasonable bounds of base price
+		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+		const maxValidPrice = item.purchasePrice * 2;
+		if (dynamicPrice < minValidPrice || dynamicPrice > maxValidPrice) {
+			console.error(`Dynamic price ${dynamicPrice} out of valid range [${minValidPrice}, ${maxValidPrice}] for item ${itemId}`);
 			return;
 		}
 
@@ -360,31 +476,105 @@ export class ShopE extends g.E {
 
 		// Check if player has enough points
 		const currentPoints = this.onCheckPoints();
-		if (currentPoints < item.purchasePrice) {
-			this.showPurchaseModal(`ポイントが不足しています。\n必要: ${item.purchasePrice}pt\n所持: ${currentPoints}pt`, false);
+		if (currentPoints < dynamicPrice) {
+			this.showPurchaseModal(`ポイントが不足しています。\n必要: ${dynamicPrice}pt\n所持: ${currentPoints}pt`, false);
 			return;
 		}
 
 		// Show purchase confirmation modal
-		this.showPurchaseConfirmationModal(item);
+		this.showPurchaseConfirmationModal(item, dynamicPrice);
+	}
+
+	/**
+	 * Handles share button click
+	 * @param args The item ID and dynamic price (format: "itemId_price")
+	 */
+	private handleShare(args: string): void {
+		// Split from the right to handle item IDs with underscores
+		const lastUnderscoreIndex = args.lastIndexOf("_");
+		if (lastUnderscoreIndex === -1) {
+			console.error(`Invalid button args format: ${args}`);
+			return;
+		}
+		const itemId = args.substring(0, lastUnderscoreIndex);
+		const priceStr = args.substring(lastUnderscoreIndex + 1);
+		const sharedPrice = parseInt(priceStr, 10);
+
+		// Validate parsed price
+		if (isNaN(sharedPrice) || sharedPrice <= 0) {
+			console.error(`Invalid price in share args: ${priceStr}`);
+			return;
+		}
+
+		// Validate item ID is not empty
+		if (!itemId.trim()) {
+			console.error(`Empty item ID in share args: ${args}`);
+			return;
+		}
+
+		const item = this.itemManager.getItem(itemId);
+		if (!item) {
+			console.error(`Item not found: ${itemId}`);
+			return;
+		}
+
+		// Validate shared price is within reasonable bounds of base price
+		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+		const maxValidPrice = item.purchasePrice * 2;
+		if (sharedPrice < minValidPrice || sharedPrice > maxValidPrice) {
+			console.error(`Shared price ${sharedPrice} out of valid range [${minValidPrice}, ${maxValidPrice}] for item ${itemId}`);
+			return;
+		}
+
+		// Call share callback if provided
+		if (this.onShareProduct) {
+			this.onShareProduct(item, sharedPrice);
+		}
+
+		// Show confirmation that item was shared
+		this.showPurchaseModal(`${item.name}をシェアしました！\n価格: ${sharedPrice}pt\n\nタイムラインに投稿されました。`, true);
+	}
+
+	/**
+	 * Handles disabled share button click (when timeline not revealed)
+	 * @param args The item ID and dynamic price (format: "itemId_price")
+	 */
+	private handleShareDisabled(args: string): void {
+		// Split from the right to handle item IDs with underscores
+		const lastUnderscoreIndex = args.lastIndexOf("_");
+		if (lastUnderscoreIndex === -1) {
+			console.error(`Invalid button args format: ${args}`);
+			return;
+		}
+		const itemId = args.substring(0, lastUnderscoreIndex);
+
+		const item = this.itemManager.getItem(itemId);
+		if (!item) {
+			console.error(`Item not found: ${itemId}`);
+			return;
+		}
+
+		// Show SNS connection requirement modal with button reference for reactivation
+		this.showSnsRequirementModal(itemId);
 	}
 
 	/**
 	 * Shows purchase confirmation modal
 	 * @param item The item to purchase
+	 * @param dynamicPrice The current dynamic price
 	 */
-	private showPurchaseConfirmationModal(item: ItemData): void {
+	private showPurchaseConfirmationModal(item: ItemData, dynamicPrice: number): void {
 		this.closeModal();
 
-		const pointBack = Math.floor(item.purchasePrice * SHOP_CONFIG.POINT_BACK_RATE);
+		const pointBack = Math.floor(dynamicPrice * SHOP_CONFIG.POINT_BACK_RATE);
 		const pointBackRate = Math.floor(SHOP_CONFIG.POINT_BACK_RATE * 100);
-		const modalMessage = `${item.name}を購入しますか？\n\n価格: ${item.purchasePrice}pt\n` +
-			`精算価値: ${item.individualPrice}pt\nポイントバック: ${pointBack}pt (${pointBackRate}%)`;
+		const modalMessage = `${item.name}を購入しますか？\n\n価格: ${dynamicPrice}pt (変動価格)\n` +
+			`定価: ${item.purchasePrice}pt\nポイントバック: ${pointBack}pt (${pointBackRate}%)`;
 
 		const modal = new ModalE({
 			scene: this.scene,
 			name: "purchaseConfirmModal",
-			args: item.id,
+			args: `${item.id}|${dynamicPrice}`, // Use pipe separator to avoid underscore conflicts
 			title: "購入確認",
 			message: modalMessage,
 			width: SHOP_CONFIG.MODAL_WIDTH,
@@ -393,7 +583,7 @@ export class ShopE extends g.E {
 		});
 
 		// Add confirmation buttons
-		this.addConfirmationButtons(modal, item);
+		this.addConfirmationButtons(modal, item, dynamicPrice);
 
 		this.currentModal = modal;
 		this.scene.append(modal);
@@ -403,8 +593,9 @@ export class ShopE extends g.E {
 	 * Adds confirmation buttons to purchase modal
 	 * @param modal The modal to add buttons to
 	 * @param item The item being purchased
+	 * @param dynamicPrice The current dynamic price
 	 */
-	private addConfirmationButtons(modal: ModalE<string>, item: ItemData): void {
+	private addConfirmationButtons(modal: ModalE<string>, item: ItemData, dynamicPrice: number): void {
 		// Replace close button with custom buttons using new multi-button API
 		modal.replaceCloseButtons([
 			{
@@ -431,7 +622,7 @@ export class ShopE extends g.E {
 				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
 				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
 				onComplete: () => {
-					this.executePurchase(item);
+					this.executePurchase(item, dynamicPrice);
 				}
 			}
 		]);
@@ -440,13 +631,14 @@ export class ShopE extends g.E {
 	/**
 	 * Executes the actual purchase
 	 * @param item The item to purchase
+	 * @param dynamicPrice The current dynamic price
 	 */
-	private executePurchase(item: ItemData): void {
+	private executePurchase(item: ItemData, dynamicPrice: number): void {
 		// Calculate point back
-		const pointBack = Math.floor(item.purchasePrice * SHOP_CONFIG.POINT_BACK_RATE);
+		const pointBack = Math.floor(dynamicPrice * SHOP_CONFIG.POINT_BACK_RATE);
 
 		// Deduct purchase price but add point back
-		const netCost = item.purchasePrice - pointBack;
+		const netCost = dynamicPrice - pointBack;
 		this.onDeductPoints(netCost);
 
 		// Add item to inventory
@@ -457,7 +649,7 @@ export class ShopE extends g.E {
 			this.onItemPurchased(item);
 
 			// Show success modal with point back info
-			this.showPurchaseModal(`${item.name}を購入しました！\n\n-${item.purchasePrice}pt\n+${pointBack}pt (ポイントバック)\n実質 -${netCost}pt`, true);
+			this.showPurchaseModal(`${item.name}を購入しました！\n\n-${dynamicPrice}pt (変動価格)\n+${pointBack}pt (ポイントバック)\n実質 -${netCost}pt`, true);
 
 			// Refresh the shop display to update button states
 			this.scene.setTimeout(() => {
@@ -507,6 +699,78 @@ export class ShopE extends g.E {
 	}
 
 	/**
+	 * Shows SNS connection requirement modal when share button is disabled
+	 * @param itemId The item ID to reactivate the share button for
+	 */
+	private showSnsRequirementModal(itemId: string): void {
+		this.closeModal();
+
+		const modal = new ModalE({
+			scene: this.scene,
+			name: "snsRequirementModal",
+			args: "",
+			title: "SNS連携が必要です",
+			message: "シェア機能を利用するには、SNS連携タスクを完了する必要があります。\n\nSNS連携を行いますか？",
+			width: SHOP_CONFIG.MODAL_WIDTH,
+			height: SHOP_CONFIG.MODAL_HEIGHT,
+			onClose: () => this.closeModal(),
+		});
+
+		// Add confirmation buttons
+		modal.replaceCloseButtons([
+			{
+				text: "キャンセル",
+				backgroundColor: SHOP_CONFIG.CANCEL_BUTTON_COLOR,
+				textColor: "white",
+				fontSize: 14,
+				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
+				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
+				onComplete: () => {
+					// Reactivate the share button when cancel is clicked, but maintain disabled style
+					this.reactivateDisabledShareButton(itemId);
+					// Modal closes automatically after onComplete
+				}
+			},
+			{
+				text: "OK",
+				backgroundColor: SHOP_CONFIG.BUY_BUTTON_COLOR,
+				textColor: "white",
+				fontSize: 14,
+				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
+				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
+				onComplete: () => {
+					// Execute SNS connection
+					if (this.onSnsConnectionRequest) {
+						this.onSnsConnectionRequest();
+					}
+				}
+			}
+		]);
+
+		this.currentModal = modal;
+		this.scene.append(modal);
+	}
+
+	/**
+	 * Reactivates a disabled share button while maintaining its disabled appearance
+	 * @param itemId The item ID of the share button to reactivate
+	 */
+	private reactivateDisabledShareButton(itemId: string): void {
+		const shareButton = this.shareButtons.get(itemId);
+		if (shareButton) {
+			// Reactivate the button functionality
+			shareButton.reactivate();
+
+			// If timeline is still not revealed, ensure the button maintains disabled styling
+			if (!this.onIsTimelineRevealed()) {
+				// Reset the button colors to disabled state
+				shareButton.setBackgroundColor("#95a5a6"); // Gray background for disabled
+				shareButton.setTextColor("#7f8c8d"); // Darker gray text for disabled
+			}
+		}
+	}
+
+	/**
 	 * Closes the current modal
 	 */
 	private closeModal(): void {
@@ -520,8 +784,9 @@ export class ShopE extends g.E {
 	 * Refreshes the shop display to update button states
 	 */
 	private refreshShopDisplay(): void {
-		// Clear purchase button references for reactivation
+		// Clear button references for reactivation
 		this.purchaseButtons.clear();
+		this.shareButtons.clear();
 
 		// Remove all children and recreate the layout
 		// This is a simple approach to refresh the display
@@ -530,4 +795,5 @@ export class ShopE extends g.E {
 		}
 		this.createLayout();
 	}
+
 }

@@ -61,6 +61,14 @@ export class HeaderE extends g.E {
 	}
 
 	/**
+	 * Gets the current remaining time
+	 * @returns Remaining time in seconds
+	 */
+	getRemainingTime(): number {
+		return this.pointDisplay.getRemainingTime();
+	}
+
+	/**
 	 * Updates the displayed time
 	 * @param remainingSec Remaining time in seconds
 	 */

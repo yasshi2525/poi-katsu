@@ -1,5 +1,7 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { AffiliateBroadcastMessage } from "../data/affiliateMessages";
 import { ItemData } from "../data/itemData";
+import { createSharedPost, SharedPostData } from "../data/sharedPostData";
 import { TaskData } from "../data/taskData";
 import { ItemManager } from "../manager/itemManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
@@ -73,6 +75,9 @@ export class HomeE extends g.E {
 	private isProfileEditorVisible: boolean = false;
 	private isTimelineVisible: boolean = false;
 	private isShopVisible: boolean = false;
+
+	// Affiliate system
+	private postIdCounter: number = 0;
 
 
 	// Banner data
@@ -179,6 +184,14 @@ export class HomeE extends g.E {
 	}
 
 	/**
+	 * Gets the remaining time in seconds
+	 * @returns Remaining time in seconds
+	 */
+	getRemainingTime(): number {
+		return this.header.getRemainingTime();
+	}
+
+	/**
 	 * Switches to a specific banner by ID
 	 * @param bannerId The ID of the banner to show
 	 */
@@ -210,6 +223,46 @@ export class HomeE extends g.E {
 		return this.taskList;
 	}
 
+	/**
+	 * Adds a shared post to the timeline from broadcast
+	 */
+	addSharedPostToTimeline(sharedPost: SharedPostData): void {
+		if (this.timeline) {
+			this.timeline.addSharedPost(sharedPost);
+		}
+	}
+
+	/**
+	 * Awards affiliate reward points to the current player
+	 */
+	awardAffiliateReward(rewardPoints: number): void {
+		this.addScore(rewardPoints);
+		// Create a simple modal notification for affiliate reward
+		const modal = new ModalE<string>({
+			scene: this.scene,
+			name: "affiliate_reward_notification",
+			args: "affiliate_reward",
+			title: "アフィリエイト報酬",
+			message: `+${rewardPoints}pt を獲得しました！`,
+			onClose: () => { /* Auto-close */ }
+		});
+		modal.replaceCloseButton({
+			text: "OK",
+			backgroundColor: "#f39c12",
+			onComplete: () => { /* Close on OK */ }
+		});
+		this.currentModal = modal;
+		this.scene.append(modal);
+	}
+
+	/**
+	 * Updates the purchase count for an affiliate post
+	 */
+	updateAffiliatePurchaseCount(postId: string): void {
+		if (this.timeline) {
+			this.timeline.incrementPurchaseCount(postId);
+		}
+	}
 
 	/**
 	 * Initializes ItemManager
@@ -284,7 +337,18 @@ export class HomeE extends g.E {
 			width: width,
 			height: height - 140, // Reduced by item list height
 			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
-			y: 140 // Below header + item list
+			y: 140, // Below header + item list
+			itemManager: this.itemManager,
+			onAffiliatePurchase: (postId: string, buyerName: string, rewardPoints: number) =>
+				this.handleAffiliatePurchase(postId, buyerName, rewardPoints),
+			onCheckPoints: () => this.getScore(),
+			onDeductPoints: (amount: number) => this.addScore(-amount),
+			onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
+			onCheckOwnership: (itemId: string) => this.itemManager.ownsItem(itemId),
+			onGetPlayerName: () => {
+				const gameVars = this.scene.game.vars as GameVars;
+				return gameVars.playerProfile.name;
+			}
 		});
 		this.timeline.hide();
 		this.append(this.timeline);
@@ -519,6 +583,11 @@ export class HomeE extends g.E {
 		// Make timeline visible first
 		this.timeline.show();
 
+		// Refresh shop to show share buttons if shop exists
+		if (this.shop) {
+			this.shop.refreshForTimelineReveal();
+		}
+
 		// Create animation timeline for fade-in effect
 		const timeline = new Timeline(this.scene);
 
@@ -602,7 +671,11 @@ export class HomeE extends g.E {
 				onCheckPoints: () => this.getScore(),
 				onDeductPoints: (amount: number) => this.addScore(-amount),
 				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
-				onBack: () => this.switchBackFromShop()
+				onBack: () => this.switchBackFromShop(),
+				onGetRemainingTime: () => this.getRemainingTime(),
+				onIsTimelineRevealed: () => this.isTimelineVisible,
+				onShareProduct: (item: ItemData, sharedPrice: number) => this.handleProductShare(item, sharedPrice),
+				onSnsConnectionRequest: () => this.handleSnsConnectionRequest()
 			});
 			this.append(this.shop);
 		} else {
@@ -708,6 +781,139 @@ export class HomeE extends g.E {
 	private onItemPurchased(_item: ItemData): void {
 		// Refresh item list to show newly purchased item
 		this.itemList.refreshItems();
+	}
+
+	/**
+	 * Handles product sharing from shop
+	 * @param item The item being shared
+	 * @param sharedPrice The price at which it was shared
+	 */
+	private handleProductShare(item: ItemData, sharedPrice: number): void {
+		if (!this.isTimelineVisible) {
+			console.warn("Timeline not revealed yet, cannot share products");
+			return;
+		}
+
+		// Get current player name from game vars
+		const gameVars = this.scene.game.vars as GameVars;
+		const playerName = gameVars.playerProfile.name;
+
+		// Create shared post
+		const postId = `affiliate_${++this.postIdCounter}`;
+		const sharedPost = createSharedPost({
+			id: postId,
+			sharerId: this.scene.game.selfId || "unknown",
+			sharerName: playerName,
+			item: item,
+			sharedPrice: sharedPrice,
+			sharedAt: this.scene.game.age
+		});
+
+		// Broadcast to all players
+		const affiliateMessage: AffiliateBroadcastMessage = {
+			playerId: this.scene.game.selfId || "unknown",
+			playerName: playerName,
+			sharedPost: sharedPost
+		};
+
+		const message = {
+			type: "affiliatePostShared",
+			affiliateData: affiliateMessage
+		};
+
+		this.scene.game.raiseEvent(new g.MessageEvent(message));
+
+		// Add to local timeline (since broadcast handler only processes messages from other players)
+		this.timeline.addSharedPost(sharedPost);
+	}
+
+	/**
+	 * Handles affiliate purchase completion
+	 * @param _postId The shared post ID (unused but required for callback interface)
+	 * @param buyerName The buyer's name
+	 * @param rewardPoints Affiliate reward points
+	 */
+	private handleAffiliatePurchase(_postId: string, buyerName: string, rewardPoints: number): void {
+		// Add affiliate reward points to current player
+		this.addScore(rewardPoints);
+
+		// Show notification about affiliate reward
+		this.showAffiliateRewardNotification(rewardPoints, buyerName);
+	}
+
+	/**
+	 * Shows affiliate reward notification
+	 * @param rewardPoints Points earned from affiliate
+	 * @param buyerName Name of the buyer
+	 */
+	private showAffiliateRewardNotification(rewardPoints: number, buyerName: string): void {
+		// Create achievement notification that slides in from the right
+		const achievementNotification = new g.E({
+			scene: this.scene,
+			x: this.screenWidth, // Start off-screen to the right
+			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET + 200, // Position below other notifications
+		});
+
+		// Background for notification
+		const notificationBg = new g.FilledRect({
+			scene: this.scene,
+			width: 350,
+			height: 80,
+			x: 0,
+			y: 0,
+			cssColor: "#e67e22", // Orange color for affiliate
+		});
+		achievementNotification.append(notificationBg);
+
+		// Achievement text
+		const achievementText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 14,
+				fontColor: "white",
+			}),
+			text: `アフィリエイト報酬獲得！ +${rewardPoints}pt\n${buyerName}さんが商品を購入しました！`,
+			x: 10,
+			y: 15,
+		});
+		achievementNotification.append(achievementText);
+
+		this.append(achievementNotification);
+
+		// Animate notification: slide in, wait, slide out
+		const timeline = new Timeline(this.scene);
+		timeline.create(achievementNotification)
+			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for affiliate
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+			.call(() => {
+				achievementNotification.destroy();
+			});
+	}
+
+	/**
+	 * Handles SNS connection request from disabled share button
+	 */
+	private async handleSnsConnectionRequest(): Promise<void> {
+		// First, go back to home if we're in shop
+		if (this.isShopVisible) {
+			this.switchBackFromShop();
+		}
+
+		// Get and execute the SNS task
+		const snsTask = this.taskManager.getTask("sns");
+		if (snsTask) {
+			try {
+				const result = await this.taskManager.executeTask(snsTask);
+				if (!result.success) {
+					console.warn(`SNS task execution failed: ${result.message}`);
+				}
+			} catch (error) {
+				console.error("SNS task execution error:", error);
+			}
+		}
 	}
 
 	/**
