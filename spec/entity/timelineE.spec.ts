@@ -350,7 +350,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(testSharedPost);
+			timeline.addSharedPostForTesting(testSharedPost);
 		});
 
 		it("should disable button after successful purchase", () => {
@@ -391,7 +391,7 @@ describe("TimelineE", () => {
 			});
 			scene.append(timeline);
 
-			timeline.addSharedPost(testSharedPost);
+			timeline.addSharedPostForTesting(testSharedPost);
 
 			// Button should be created in disabled state
 			const button = (timeline as any).affiliateButtons.get("button_post");

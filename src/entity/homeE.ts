@@ -235,24 +235,10 @@ export class HomeE extends g.E {
 	/**
 	 * Awards affiliate reward points to the current player
 	 */
-	awardAffiliateReward(rewardPoints: number): void {
+	awardAffiliateReward(rewardPoints: number, buyerName?: string): void {
 		this.addScore(rewardPoints);
-		// Create a simple modal notification for affiliate reward
-		const modal = new ModalE<string>({
-			scene: this.scene,
-			name: "affiliate_reward_notification",
-			args: "affiliate_reward",
-			title: "アフィリエイト報酬",
-			message: `+${rewardPoints}pt を獲得しました！`,
-			onClose: () => { /* Auto-close */ }
-		});
-		modal.replaceCloseButton({
-			text: "OK",
-			backgroundColor: "#f39c12",
-			onComplete: () => { /* Close on OK */ }
-		});
-		this.currentModal = modal;
-		this.scene.append(modal);
+		// Use non-blocking notification bar instead of modal
+		this.showAffiliateRewardNotification(rewardPoints, buyerName || "他のプレイヤー");
 	}
 
 	/**

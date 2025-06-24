@@ -1,9 +1,20 @@
+import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { AffiliatePurchaseMessage } from "../data/affiliateMessages";
 import { ItemData } from "../data/itemData";
 import { SharedPostData, incrementPurchaseCount } from "../data/sharedPostData";
 import { ItemManager } from "../manager/itemManager";
 import { LabelButtonE } from "./labelButtonE";
+import { ModalE } from "./modalE";
+
+/**
+ * Animation configuration constants
+ */
+const ANIMATION_CONFIG = {
+	POST_SHIFT_DURATION: 400,
+	POST_FADE_IN_DURATION: 600,
+	POST_FADE_IN_DELAY: 200,
+} as const;
 
 /**
  * Layout configuration interface
@@ -54,6 +65,8 @@ export class TimelineE extends g.E {
 	private readonly onGetPlayerName?: () => string;
 	private sharedPosts: SharedPostData[] = [];
 	private affiliateButtons: Map<string, LabelButtonE<string>> = new Map();
+	private timelineItems: g.E[] = [];
+	private loadingOverlay?: g.E;
 
 	/**
 	 * Creates a new Timeline instance
@@ -74,12 +87,28 @@ export class TimelineE extends g.E {
 	}
 
 	/**
-	 * Adds a shared post to the timeline
+	 * Adds a shared post to the timeline with smooth animation
 	 * @param sharedPost The shared post data
 	 */
 	addSharedPost(sharedPost: SharedPostData): void {
 		this.sharedPosts.unshift(sharedPost); // Add to beginning
-		this.refreshTimeline();
+
+		// Only animate if timeline is visible, otherwise just refresh the display
+		if (this.opacity > 0) {
+			this.animateNewPost();
+		} else {
+			// Timeline is hidden, use synchronous refresh to ensure posts are ready when revealed
+			this.refreshTimeline();
+		}
+	}
+
+	/**
+	 * Adds a shared post to the timeline without animation (for testing)
+	 * @param sharedPost The shared post data
+	 */
+	addSharedPostForTesting(sharedPost: SharedPostData): void {
+		this.sharedPosts.unshift(sharedPost); // Add to beginning
+		this.refreshTimeline(); // Use old synchronous method for tests
 	}
 
 	/**
@@ -90,7 +119,7 @@ export class TimelineE extends g.E {
 		const sharedPost = this.sharedPosts.find(post => post.id === postId);
 		if (sharedPost) {
 			sharedPost.purchaseCount++;
-			this.refreshTimeline(); // Refresh to update the display
+			this.updatePurchaseCount(postId); // Update display without destroying children
 		}
 	}
 
@@ -110,8 +139,7 @@ export class TimelineE extends g.E {
 					width: 700,
 					height: 35,
 					children: {
-						title: { x: 0, y: 0, width: 150, height: 20 },
-						updateBtn: { x: 650, y: 3, width: 50, height: 14 }
+						title: { x: 0, y: 0, width: 150, height: 20 }
 					}
 				},
 				item: {
@@ -147,7 +175,6 @@ export class TimelineE extends g.E {
 	private createHeader(): void {
 		const headerLayout = this.layout.children!.header;
 		const titleLayout = headerLayout.children!.title;
-		const updateBtnLayout = headerLayout.children!.updateBtn;
 
 		// Timeline header
 		const timelineTitle = new g.Label({
@@ -163,30 +190,18 @@ export class TimelineE extends g.E {
 			y: this.layout.y + titleLayout.y,
 		});
 		this.append(timelineTitle);
-
-		const updateBtn = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "#3498db",
-			}),
-			text: "更新",
-			x: this.layout.x + updateBtnLayout.x,
-			y: this.layout.y + updateBtnLayout.y,
-			touchable: true,
-			local: true,
-		});
-		this.append(updateBtn);
 	}
 
 	/**
-	 * Refreshes the timeline display
+	 * Refreshes the timeline display (for testing only)
+	 * @deprecated Use animateNewPost() for production code
 	 */
 	private refreshTimeline(): void {
 		// Clear affiliate button references
 		this.affiliateButtons.clear();
+
+		// Clear timeline items array
+		this.timelineItems = [];
 
 		// Remove all timeline items except the first one (header)
 		if (this.children && this.children.length > 0) {
@@ -214,14 +229,16 @@ export class TimelineE extends g.E {
 		// Add shared posts first
 		this.sharedPosts.forEach((sharedPost) => {
 			const itemY = this.layout.y + this.layout.children!.item.y + (itemIndex * 90);
-			this.createAffiliateTimelineItem(sharedPost, this.layout.x, itemY);
+			const postItem = this.createAffiliateTimelineItem(sharedPost, this.layout.x, itemY);
+			this.timelineItems.push(postItem);
 			itemIndex++;
 		});
 
 		// Add default items
 		defaultItems.forEach((item) => {
 			const itemY = this.layout.y + this.layout.children!.item.y + (itemIndex * 90);
-			this.createTimelineItem(item.user, item.action, item.reactions, this.layout.x, itemY);
+			const postItem = this.createTimelineItem(item.user, item.action, item.reactions, this.layout.x, itemY);
+			this.timelineItems.push(postItem);
 			itemIndex++;
 		});
 	}
@@ -229,7 +246,7 @@ export class TimelineE extends g.E {
 	/**
 	 * Creates an affiliate timeline item for shared products
 	 */
-	private createAffiliateTimelineItem(sharedPost: SharedPostData, x: number, y: number): void {
+	private createAffiliateTimelineItem(sharedPost: SharedPostData, x: number, y: number): g.E {
 		const itemLayout = this.layout.children!.item;
 		const avatarLayout = itemLayout.children!.avatar;
 		const userNameLayout = itemLayout.children!.userName;
@@ -240,27 +257,36 @@ export class TimelineE extends g.E {
 		// Check if this is a self-posted item
 		const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
 
-		// Post background for visibility
-		const postBackground = new g.FilledRect({
+		// Create container for the post
+		const postContainer = new g.E({
 			scene: this.scene,
 			width: itemLayout.width,
 			height: itemLayout.height,
 			x: x,
 			y: y,
+		});
+
+		// Post background for visibility
+		const postBackground = new g.FilledRect({
+			scene: this.scene,
+			width: itemLayout.width,
+			height: itemLayout.height,
+			x: 0,
+			y: 0,
 			cssColor: "white",
 		});
-		this.append(postBackground);
+		postContainer.append(postBackground);
 
 		// User avatar (circle) - different color for self-posted
 		const avatar = new g.FilledRect({
 			scene: this.scene,
 			width: avatarLayout.width,
 			height: avatarLayout.height,
-			x: x + avatarLayout.x,
-			y: y + avatarLayout.y,
+			x: avatarLayout.x,
+			y: avatarLayout.y,
 			cssColor: isSelfPosted ? "#95a5a6" : "#3498db", // Gray for self-posted, blue for others
 		});
-		this.append(avatar);
+		postContainer.append(avatar);
 
 		// User name
 		const userName = new g.Label({
@@ -273,10 +299,10 @@ export class TimelineE extends g.E {
 				fontWeight: "bold",
 			}),
 			text: sharedPost.sharerName,
-			x: x + userNameLayout.x,
-			y: y + userNameLayout.y,
+			x: userNameLayout.x,
+			y: userNameLayout.y,
 		});
-		this.append(userName);
+		postContainer.append(userName);
 
 		// Action text - different for self-posted items
 		const actionTextContent = isSelfPosted
@@ -292,11 +318,11 @@ export class TimelineE extends g.E {
 				fontColor: isSelfPosted ? "#7f8c8d" : "#34495e", // Muted color for self-posted
 			}),
 			text: actionTextContent,
-			x: x + actionTextLayout.x,
-			y: y + actionTextLayout.y,
+			x: actionTextLayout.x,
+			y: actionTextLayout.y,
 			width: actionTextLayout.width,
 		});
-		this.append(actionText);
+		postContainer.append(actionText);
 
 		// Price text - muted styling for self-posted items
 		const priceText = new g.Label({
@@ -309,10 +335,10 @@ export class TimelineE extends g.E {
 				fontWeight: isSelfPosted ? "normal" : "bold", // Normal weight for self-posted
 			}),
 			text: `価格: ${sharedPost.sharedPrice}pt (アフィリエイト) / 定価: ${sharedPost.item.purchasePrice}pt`,
-			x: x + priceTextLayout.x,
-			y: y + priceTextLayout.y,
+			x: priceTextLayout.x,
+			y: priceTextLayout.y,
 		});
-		this.append(priceText);
+		postContainer.append(priceText);
 
 		// Only show buy button for non-self-posted items
 		if (!isSelfPosted) {
@@ -327,8 +353,8 @@ export class TimelineE extends g.E {
 				text: isAlreadyOwned ? "所持済" : "購入",
 				width: buyBtnLayout.width,
 				height: buyBtnLayout.height,
-				x: x + buyBtnLayout.x,
-				y: y + buyBtnLayout.y,
+				x: buyBtnLayout.x,
+				y: buyBtnLayout.y,
 				backgroundColor: isAlreadyOwned ? "#95a5a6" : "#e67e22",
 				textColor: "white",
 				fontSize: 12,
@@ -341,8 +367,12 @@ export class TimelineE extends g.E {
 			}
 
 			this.affiliateButtons.set(sharedPost.id, buyButton);
-			this.append(buyButton);
+			postContainer.append(buyButton);
 		}
+
+		// Append container to timeline and return it
+		this.append(postContainer);
+		return postContainer;
 	}
 
 	/**
@@ -379,7 +409,7 @@ export class TimelineE extends g.E {
 		if (this.onCheckPoints) {
 			const currentPoints = this.onCheckPoints();
 			if (currentPoints < sharedPost.sharedPrice) {
-				console.warn(`Not enough points for affiliate purchase. Required: ${sharedPost.sharedPrice}, Current: ${currentPoints}`);
+				this.showErrorModal("ポイント不足", `購入に必要なポイントが不足しています。\n必要: ${sharedPost.sharedPrice}pt\n現在: ${currentPoints}pt`, postId);
 				return;
 			}
 		}
@@ -391,7 +421,7 @@ export class TimelineE extends g.E {
 
 		// Add item to inventory
 		if (!this.itemManager.purchaseItem(sharedPost.item.id)) {
-			console.error(`Failed to purchase item: ${sharedPost.item.id}`);
+			this.showErrorModal("購入エラー", "アイテムの購入に失敗しました。\n再度お試しください。", postId);
 			return;
 		}
 
@@ -433,40 +463,49 @@ export class TimelineE extends g.E {
 			// Note: LabelButtonE setText method might not exist, keeping text as is
 		}
 
-		// Refresh timeline to update purchase count display
-		this.refreshTimeline();
+		// Update purchase count display without destroying children
+		this.updatePurchaseCount(postId);
 	}
 
 	/**
 	 * Creates a single timeline item
 	 */
-	private createTimelineItem(user: string, action: string, reactions: any, x: number, y: number): void {
+	private createTimelineItem(user: string, action: string, reactions: any, x: number, y: number): g.E {
 		const itemLayout = this.layout.children!.item;
 		const avatarLayout = itemLayout.children!.avatar;
 		const userNameLayout = itemLayout.children!.userName;
 		const actionTextLayout = itemLayout.children!.actionText;
+
+		// Create container for the post
+		const postContainer = new g.E({
+			scene: this.scene,
+			width: itemLayout.width,
+			height: itemLayout.height,
+			x: x,
+			y: y,
+		});
 
 		// Post background for visibility
 		const postBackground = new g.FilledRect({
 			scene: this.scene,
 			width: itemLayout.width,
 			height: itemLayout.height,
-			x: x,
-			y: y,
+			x: 0,
+			y: 0,
 			cssColor: "white",
 		});
-		this.append(postBackground);
+		postContainer.append(postBackground);
 
 		// User avatar (circle)
 		const avatar = new g.FilledRect({
 			scene: this.scene,
 			width: avatarLayout.width,
 			height: avatarLayout.height,
-			x: x + avatarLayout.x,
-			y: y + avatarLayout.y,
+			x: avatarLayout.x,
+			y: avatarLayout.y,
 			cssColor: "#ecf0f1",
 		});
-		this.append(avatar);
+		postContainer.append(avatar);
 
 		// User name
 		const userName = new g.Label({
@@ -479,10 +518,10 @@ export class TimelineE extends g.E {
 				fontWeight: "bold",
 			}),
 			text: user,
-			x: x + userNameLayout.x,
-			y: y + userNameLayout.y,
+			x: userNameLayout.x,
+			y: userNameLayout.y,
 		});
-		this.append(userName);
+		postContainer.append(userName);
 
 		// Action text
 		const actionText = new g.Label({
@@ -494,11 +533,179 @@ export class TimelineE extends g.E {
 				fontColor: "#34495e",
 			}),
 			text: action,
-			x: x + actionTextLayout.x,
-			y: y + actionTextLayout.y,
+			x: actionTextLayout.x,
+			y: actionTextLayout.y,
 			width: actionTextLayout.width,
 		});
-		this.append(actionText);
+		postContainer.append(actionText);
 
+		// Append container to timeline and return it
+		this.append(postContainer);
+		return postContainer;
+	}
+
+	/**
+	 * Shows an error modal with button reactivation
+	 */
+	private showErrorModal(title: string, message: string, postId: string): void {
+		const modal = new ModalE({
+			scene: this.scene,
+			name: `error_modal_${postId}`,
+			args: null,
+			title: title,
+			message: message,
+			onClose: () => {
+				// Reactivate the purchase button for retry
+				const button = this.affiliateButtons.get(postId);
+				if (button) {
+					button.reactivate();
+				}
+			}
+		});
+
+		this.scene.append(modal);
+	}
+
+	/**
+	 * Updates purchase count display for a specific post without recreating
+	 * Only updates display for self-posted items to show purchase count
+	 */
+	private updatePurchaseCount(postId: string): void {
+		// Find the shared post
+		const sharedPost = this.sharedPosts.find(post => post.id === postId);
+		if (!sharedPost) return;
+
+		// Only update purchase count display for self-posted items
+		const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
+		if (!isSelfPosted) return;
+
+		// Find the corresponding timeline item
+		const postIndex = this.sharedPosts.indexOf(sharedPost);
+		if (postIndex >= 0 && postIndex < this.timelineItems.length) {
+			const postItem = this.timelineItems[postIndex];
+			// Update action text to reflect new purchase count for self-posted items only
+			const actionTextLabel = postItem.children && postItem.children[3]; // Assuming action text is forth child
+			if (actionTextLabel && actionTextLabel instanceof g.Label) {
+				const newText = `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (自分の投稿・${sharedPost.purchaseCount}人が購入)`;
+				actionTextLabel.text = newText;
+				actionTextLabel.invalidate();
+			}
+		}
+	}
+
+	/**
+	 * Creates loading overlay for timeline operations
+	 */
+	private createTimelineLoadingOverlay(): void {
+		if (this.loadingOverlay) {
+			return; // Already exists
+		}
+
+		// Create overlay covering timeline area
+		this.loadingOverlay = new g.E({
+			scene: this.scene,
+			width: this.layout.width,
+			height: this.layout.height,
+			x: this.layout.x,
+			y: this.layout.y,
+			touchable: true,
+			local: true,
+		});
+
+		// Semi-transparent background
+		const background = new g.FilledRect({
+			scene: this.scene,
+			width: this.layout.width,
+			height: this.layout.height,
+			cssColor: "rgba(0,0,0,0.3)",
+		});
+		this.loadingOverlay.append(background);
+
+		// Loading indicator
+		const loadingIcon = new g.FilledRect({
+			scene: this.scene,
+			width: 30,
+			height: 30,
+			cssColor: "#3498db",
+			x: this.layout.width / 2 - 15,
+			y: this.layout.height / 2 - 15,
+		});
+		this.loadingOverlay.append(loadingIcon);
+
+		// Add rotation animation
+		let rotation = 0;
+		const rotationHandler = (): void => {
+			rotation += 5;
+			if (rotation >= 360) rotation = 0;
+			loadingIcon.angle = rotation * Math.PI / 180;
+			loadingIcon.modified();
+		};
+		this.scene.onUpdate.add(rotationHandler);
+
+		// Loading text
+		const loadingText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 14,
+				fontColor: "white",
+			}),
+			text: "更新中...",
+			x: this.layout.width / 2 - 25,
+			y: this.layout.height / 2 + 20,
+		});
+		this.loadingOverlay.append(loadingText);
+
+		// Append to timeline
+		this.append(this.loadingOverlay);
+	}
+
+	/**
+	 * Destroys the timeline loading overlay
+	 */
+	private destroyTimelineLoadingOverlay(): void {
+		if (this.loadingOverlay) {
+			this.loadingOverlay.destroy();
+			this.loadingOverlay = undefined;
+		}
+	}
+
+	/**
+	 * Animates the addition of a new post with smooth transitions
+	 */
+	private animateNewPost(): void {
+		// Create loading overlay during animation
+		this.createTimelineLoadingOverlay();
+
+		// Create timeline that will handle the animation
+		const timeline = new Timeline(this.scene);
+
+		// First, shift existing posts down
+		this.timelineItems.forEach((item, index) => {
+			const newY = item.y + 90; // Shift down by one post height
+			timeline.create(item).to({ y: newY }, ANIMATION_CONFIG.POST_SHIFT_DURATION);
+		});
+
+		// After shift animation, create and fade in new post
+		timeline.create(this).wait(ANIMATION_CONFIG.POST_SHIFT_DURATION).call(() => {
+			// Create new post at the top
+			const newPostY = this.layout.y + this.layout.children!.item.y;
+			const newPost = this.createAffiliateTimelineItem(this.sharedPosts[0], this.layout.x, newPostY);
+
+			// Start with opacity 0 for fade-in effect
+			newPost.opacity = 0;
+			this.timelineItems.unshift(newPost);
+
+			// Fade in the new post
+			const fadeTimeline = new Timeline(this.scene);
+			fadeTimeline.create(newPost)
+				.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
+				.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION)
+				.call(() => {
+					// Animation complete, remove loading overlay
+					this.destroyTimelineLoadingOverlay();
+				});
+		});
 	}
 }

@@ -41,6 +41,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 	private pressed: boolean;
 	private pressedBy?: number;
 	private onCompleteHandler?: (args: T) => void;
+	private loadingOverlay?: g.E;
 
 	/**
 	 * Creates a new ButtonE instance
@@ -125,7 +126,11 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 		}
 		this.sync = "sending";
 		this.onSyncStateChange(this.sync);
+
+		// Create loading overlay for multi-mode to prevent multiple interactions
 		if ((this.scene.game.vars as GameVars).mode === "multi") {
+			this.createLoadingOverlay();
+
 			const message: MessageData<ButtonEMessageArgs<T>> = {
 				name: "submit",
 				args: {
@@ -189,11 +194,91 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 		if (this.sync === "received") {
 			return;
 		}
+
+		// Destroy loading overlay before completing
+		this.destroyLoadingOverlay();
+
 		this.sync = "received";
 		this.onSyncStateChange(this.sync);
 		this.onSync.fire(this.sync);
 		if (this.onCompleteHandler) {
 			this.onCompleteHandler(args);
+		}
+	}
+
+	/**
+	 * Creates a full-screen loading overlay to prevent interactions during multi-mode processing
+	 */
+	private createLoadingOverlay(): void {
+		if (this.loadingOverlay) {
+			return; // Already exists
+		}
+
+		// Create full-screen overlay
+		this.loadingOverlay = new g.E({
+			scene: this.scene,
+			width: this.scene.game.width,
+			height: this.scene.game.height,
+			touchable: true,
+			local: true,
+		});
+
+		// Semi-transparent background
+		const background = new g.FilledRect({
+			scene: this.scene,
+			width: this.scene.game.width,
+			height: this.scene.game.height,
+			cssColor: "rgba(0,0,0,0.3)",
+		});
+		this.loadingOverlay.append(background);
+
+		// Loading indicator (simple spinning circle)
+		const loadingIcon = new g.FilledRect({
+			scene: this.scene,
+			width: 40,
+			height: 40,
+			cssColor: "#3498db",
+			x: this.scene.game.width / 2 - 20,
+			y: this.scene.game.height / 2 - 20,
+		});
+		this.loadingOverlay.append(loadingIcon);
+
+		// Add simple rotation animation using scene.onUpdate
+		let rotation = 0;
+		const rotationHandler = (): void => {
+			rotation += 5;
+			if (rotation >= 360) rotation = 0;
+			loadingIcon.angle = rotation * Math.PI / 180;
+			loadingIcon.modified();
+		};
+		this.scene.onUpdate.add(rotationHandler);
+
+		// Loading text
+		const loadingText = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 16,
+				fontColor: "white",
+			}),
+			text: "処理中...",
+			x: this.scene.game.width / 2 - 30,
+			y: this.scene.game.height / 2 + 30,
+		});
+		this.loadingOverlay.append(loadingText);
+
+		// Append to scene
+		this.scene.append(this.loadingOverlay);
+	}
+
+	/**
+	 * Destroys the loading overlay
+	 */
+	private destroyLoadingOverlay(): void {
+		if (this.loadingOverlay) {
+			this.loadingOverlay.destroy();
+			this.loadingOverlay = undefined;
 		}
 	}
 }

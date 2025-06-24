@@ -242,6 +242,7 @@
 			"coeLimited": "0"
 		}
 	},
+	"maxPoints": 1,
 	"globalScripts": [
 		"node_modules/@akashic-extension/akashic-hover-plugin/lib/Converter.js",
 		"node_modules/@akashic-extension/akashic-hover-plugin/lib/HoverPlugin.js",

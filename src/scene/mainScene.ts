@@ -123,7 +123,7 @@ export class MainScene extends BaseScene {
 					const purchaseData = ev.data.purchaseData as AffiliatePurchaseMessage;
 					if (purchaseData.sharerId === this.game.selfId) {
 						// Reward the sharer with affiliate points
-						this.awardAffiliateReward(purchaseData.rewardPoints);
+						this.awardAffiliateReward(purchaseData.rewardPoints, purchaseData.buyerName);
 					}
 					// Update purchase count for all players
 					this.updateAffiliatePurchaseCount(purchaseData.postId);
@@ -153,9 +153,9 @@ export class MainScene extends BaseScene {
 	/**
 	 * Awards affiliate reward points to the current player
 	 */
-	private awardAffiliateReward(rewardPoints: number): void {
+	private awardAffiliateReward(rewardPoints: number, buyerName?: string): void {
 		if (this.home) {
-			this.home.awardAffiliateReward(rewardPoints);
+			this.home.awardAffiliateReward(rewardPoints, buyerName);
 		}
 	}
 
