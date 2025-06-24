@@ -17,6 +17,8 @@
 - **PointManager**: ポイント計算・加算処理
 - **ItemManager**: アイテム管理・セット判定
 - **NotificationManager**: 通知システム
+- **MarketManager**: 商品価格の決定
+- **BotManager**: CPUプレイヤーの行動管理
 
 ## 2. 画面・UI実装
 

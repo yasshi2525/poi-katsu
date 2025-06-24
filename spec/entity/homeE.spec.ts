@@ -3,6 +3,7 @@ import { HomeE } from "../../src/entity/homeE";
 import { LabelButtonE } from "../../src/entity/labelButtonE";
 import { ModalE } from "../../src/entity/modalE";
 import { ProfileEditorE } from "../../src/entity/profileEditorE";
+import { MarketManager } from "../../src/manager/marketManager";
 
 describe("HomeE", () => {
 	let home: HomeE;
@@ -16,6 +17,11 @@ describe("HomeE", () => {
 		gameVars.gameState = { score: 500 };
 		gameVars.playerProfile = { name: "プレイヤー", avatar: "😀" };
 		gameVars.allPlayersProfiles = {};
+
+		// Mock getMarketManager method for tests
+		const marketManager = new MarketManager(scene, "ranking");
+		marketManager.initialize();
+		(scene as any).getMarketManager = () => marketManager;
 
 		// Create header for testing
 		header = new HeaderE({

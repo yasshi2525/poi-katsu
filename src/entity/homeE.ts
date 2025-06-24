@@ -661,6 +661,13 @@ export class HomeE extends g.E {
 
 		// Create or reuse shop positioned off-screen to the right
 		if (!this.shop) {
+			// Get MarketManager from MainScene
+			const marketManager = (this.scene as any).getMarketManager();
+			if (!marketManager) {
+				console.error("MarketManager not found in MainScene");
+				return;
+			}
+
 			this.shop = new ShopE({
 				scene: this.scene,
 				width: this.screenWidth,
@@ -668,6 +675,7 @@ export class HomeE extends g.E {
 				x: this.screenWidth, // Start off-screen to the right
 				y: 0,
 				itemManager: this.itemManager,
+				marketManager: marketManager,
 				onCheckPoints: () => this.getScore(),
 				onDeductPoints: (amount: number) => this.addScore(-amount),
 				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),

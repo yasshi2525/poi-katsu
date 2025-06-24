@@ -16,8 +16,8 @@ describe("AFFILIATE_CONFIG", () => {
 		});
 
 		it("should have valid pricing configuration", () => {
-			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.5);
-			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.3);
+			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.3);
+			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.8);
 			expect(AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBe(120);
 
 			// Verify types
@@ -59,8 +59,8 @@ describe("AFFILIATE_CONFIG", () => {
 
 		it("should have consistent nested structure", () => {
 			// Verify structure consistency rather than runtime immutability
-			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.5);
-			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.3);
+			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.3);
+			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.8);
 		});
 	});
 
@@ -69,8 +69,8 @@ describe("AFFILIATE_CONFIG", () => {
 			// Min price ratio should allow for meaningful price reduction
 			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBeLessThan(1);
 
-			// Volatility should not be extreme
-			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBeLessThan(1);
+			// Volatility should be reasonable for dramatic price changes
+			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBeLessThanOrEqual(1);
 
 			// Game time should match expected session duration
 			expect(AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBe(120); // 2 minutes
@@ -107,14 +107,14 @@ describe("AFFILIATE_CONFIG", () => {
 		});
 
 		it("should have pricing parameters that create meaningful variation", () => {
-			// Volatility of 0.3 means prices can vary by ±30%
+			// Volatility of 0.8 means prices can vary by ±80% (enhanced for dramatic changes)
 			const basePrice = 100;
 			const maxVariation = basePrice * AFFILIATE_CONFIG.PRICING.VOLATILITY;
-			expect(maxVariation).toBe(30);
+			expect(maxVariation).toBe(80);
 
 			// Min price ratio ensures items don't become too cheap
 			const minPrice = basePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO;
-			expect(minPrice).toBe(Math.floor(basePrice * 0.5)); // Calculate expected value
+			expect(minPrice).toBe(Math.floor(basePrice * 0.3)); // Calculate expected value
 		});
 
 		it("should have UI dimensions suitable for game interface", () => {

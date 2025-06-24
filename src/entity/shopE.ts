@@ -1,6 +1,7 @@
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { ItemData } from "../data/itemData";
 import { ItemManager } from "../manager/itemManager";
+import { MarketManager } from "../manager/marketManager";
 import { LabelButtonE } from "./labelButtonE";
 import { ModalE } from "./modalE";
 
@@ -61,6 +62,8 @@ export interface ShopParameterObject extends g.EParameterObject {
 	height: number;
 	/** Item manager instance */
 	itemManager: ItemManager;
+	/** Market manager instance */
+	marketManager: MarketManager;
 	/** Callback to check if player has enough points */
 	onCheckPoints: () => number;
 	/** Callback to deduct points for purchase */
@@ -86,6 +89,7 @@ export interface ShopParameterObject extends g.EParameterObject {
 export class ShopE extends g.E {
 	private readonly layout: LayoutConfig;
 	private readonly itemManager: ItemManager;
+	private readonly marketManager: MarketManager;
 	private readonly onCheckPoints: () => number;
 	private readonly onDeductPoints: (amount: number) => void;
 	private readonly onItemPurchased: (item: ItemData) => void;
@@ -97,6 +101,7 @@ export class ShopE extends g.E {
 	private currentModal?: ModalE<string>;
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
 	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
+	private priceLabels: Map<string, g.Label> = new Map(); // Store price labels for real-time updates
 
 	/**
 	 * Creates a new Shop instance
@@ -106,6 +111,7 @@ export class ShopE extends g.E {
 		super(options);
 
 		this.itemManager = options.itemManager;
+		this.marketManager = options.marketManager;
 		this.onCheckPoints = options.onCheckPoints;
 		this.onDeductPoints = options.onDeductPoints;
 		this.onItemPurchased = options.onItemPurchased;
@@ -116,6 +122,9 @@ export class ShopE extends g.E {
 		this.onSnsConnectionRequest = options.onSnsConnectionRequest;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
+
+		// Listen for UI update events from MarketManager
+		this.setupUIUpdateListener();
 	}
 
 	/**
@@ -123,6 +132,19 @@ export class ShopE extends g.E {
 	 */
 	refreshForTimelineReveal(): void {
 		this.refreshShopDisplay();
+	}
+
+	/**
+	 * Cleanup method to clear intervals and resources
+	 */
+	override destroy(): void {
+		// Clear all stored references
+		this.purchaseButtons.clear();
+		this.shareButtons.clear();
+		this.priceLabels.clear();
+
+		// Call parent destroy
+		super.destroy();
 	}
 
 	/**
@@ -272,37 +294,24 @@ export class ShopE extends g.E {
 	}
 
 	/**
-	 * Calculates dynamic price based on remaining time
-	 * @param basePrice Base price of the item
-	 * @returns Dynamic price based on time remaining
+	 * Gets dynamic price from MarketManager cache only
+	 * @param item Item data for price lookup
+	 * @returns Dynamic price from MarketManager cache or fallback to base price
 	 */
-	private calculateDynamicPrice(basePrice: number): number {
-		// Input validation
-		if (basePrice <= 0) {
-			console.warn(`Invalid base price: ${basePrice}, using default value 100`);
-			basePrice = 100;
+	private getDynamicPrice(item: ItemData): number {
+		const remainingTime = Math.max(0, this.onGetRemainingTime());
+
+		// Always get price from MarketManager cache - never calculate directly
+		// This ensures all instances use the same synchronized price data
+		const marketPrice = this.marketManager.getDynamicPrice(item, remainingTime);
+
+		// If no cached price available, fallback to base price
+		if (!marketPrice || marketPrice <= 0) {
+			console.warn(`No cached price for item ${item.id}, using base price`);
+			return item.purchasePrice;
 		}
 
-		const remainingTime = Math.max(0, this.onGetRemainingTime()); // Ensure non-negative
-		// Use scene.game.random for deterministic behavior
-		const randomMultiplier = this.scene.game.random.generate();
-
-		// Price fluctuates based on remaining time and random factor using config values
-		// Early game (high remaining time): more volatile pricing
-		// Late game (low remaining time): price stabilizes closer to base
-		const timeRatio = remainingTime / AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME;
-		const volatility = AFFILIATE_CONFIG.PRICING.VOLATILITY * Math.min(timeRatio, 1); // Cap timeRatio at 1
-		const priceVariation = (randomMultiplier - 0.5) * 2 * volatility; // -volatility to +volatility
-
-		// Calculate dynamic price with bounds checking
-		const minPrice = Math.floor(basePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
-		const dynamicPrice = Math.max(
-			Math.floor(basePrice * (1 + priceVariation)),
-			minPrice
-		);
-
-		// Additional safety bounds checking
-		return Math.max(1, Math.min(dynamicPrice, basePrice * 2)); // Ensure price is between 1 and 2x base price
+		return marketPrice;
 	}
 
 	/**
@@ -316,8 +325,8 @@ export class ShopE extends g.E {
 		const buyButtonLayout = productLayout.children!.buyButton;
 		const shareButtonLayout = productLayout.children!.shareButton;
 
-		// Calculate dynamic price
-		const dynamicPrice = this.calculateDynamicPrice(item.purchasePrice);
+		// Get dynamic price from MarketManager cache
+		const dynamicPrice = this.getDynamicPrice(item);
 
 		// Product card background
 		const cardBg = new g.FilledRect({
@@ -359,7 +368,7 @@ export class ShopE extends g.E {
 		});
 		this.append(productName);
 
-		// Product price (now dynamic)
+		// Product price (now dynamic with real-time updates)
 		const productPrice = new g.Label({
 			scene: this.scene,
 			font: new g.DynamicFont({
@@ -373,6 +382,9 @@ export class ShopE extends g.E {
 			y: y + priceLayout.y,
 		});
 		this.append(productPrice);
+
+		// Store price label for real-time updates
+		this.priceLabels.set(item.id, productPrice);
 
 		// Check if item is already owned
 		const isOwned = this.itemManager.ownsItem(item.id);
@@ -460,10 +472,10 @@ export class ShopE extends g.E {
 			return;
 		}
 
-		// Validate dynamic price is within reasonable bounds of base price
-		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
-		const maxValidPrice = item.purchasePrice * 2;
-		if (dynamicPrice < minValidPrice || dynamicPrice > maxValidPrice) {
+		// Validate dynamic price is within reasonable bounds of base price (updated for enhanced dynamics)
+		if (!this.isValidDynamicPrice(item, dynamicPrice)) {
+			const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+			const maxValidPrice = item.purchasePrice * 3;
 			console.error(`Dynamic price ${dynamicPrice} out of valid range [${minValidPrice}, ${maxValidPrice}] for item ${itemId}`);
 			return;
 		}
@@ -518,10 +530,10 @@ export class ShopE extends g.E {
 			return;
 		}
 
-		// Validate shared price is within reasonable bounds of base price
-		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
-		const maxValidPrice = item.purchasePrice * 2;
-		if (sharedPrice < minValidPrice || sharedPrice > maxValidPrice) {
+		// Validate shared price is within reasonable bounds of base price (updated for enhanced dynamics)
+		if (!this.isValidDynamicPrice(item, sharedPrice)) {
+			const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+			const maxValidPrice = item.purchasePrice * 3;
 			console.error(`Shared price ${sharedPrice} out of valid range [${minValidPrice}, ${maxValidPrice}] for item ${itemId}`);
 			return;
 		}
@@ -794,6 +806,48 @@ export class ShopE extends g.E {
 			this.children.forEach(child => child.destroy());
 		}
 		this.createLayout();
+	}
+
+	/**
+	 * Sets up listener for UI update events from MarketManager
+	 */
+	private setupUIUpdateListener(): void {
+		this.scene.onMessage.add((ev: g.MessageEvent) => {
+			if (ev.data?.type === "uiPriceUpdate") {
+				this.updateAllPriceLabels();
+			}
+		});
+	}
+
+	/**
+	 * Updates all price labels with current dynamic prices
+	 */
+	private updateAllPriceLabels(): void {
+		const availableItems = this.itemManager.getAvailableItems();
+
+		availableItems.forEach(item => {
+			const priceLabel = this.priceLabels.get(item.id);
+			if (priceLabel) {
+				const currentPrice = this.getDynamicPrice(item);
+				const newText = `${currentPrice}pt`;
+				if (priceLabel.text !== newText) {
+					priceLabel.text = newText;
+					priceLabel.invalidate(); // Force redraw
+				}
+			}
+		});
+	}
+
+	/**
+	 * Validates if a dynamic price is within acceptable bounds for an item
+	 * @param item The item to validate price for
+	 * @param dynamicPrice The dynamic price to validate
+	 * @returns true if price is valid, false otherwise
+	 */
+	private isValidDynamicPrice(item: ItemData, dynamicPrice: number): boolean {
+		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
+		const maxValidPrice = item.purchasePrice * 3; // Updated to match enhanced price range
+		return dynamicPrice >= minValidPrice && dynamicPrice <= maxValidPrice;
 	}
 
 }

@@ -4,6 +4,7 @@ import { SharedPostData } from "../data/sharedPostData";
 import { AgreementE } from "../entity/agreementE";
 import { HeaderE } from "../entity/headerE";
 import { HomeE } from "../entity/homeE";
+import { MarketManager } from "../manager/marketManager";
 import { BaseScene } from "./baseScene";
 
 const config = {
@@ -15,6 +16,7 @@ export class MainScene extends BaseScene {
 	private lastRemainSec: number;
 	private header?: HeaderE;
 	private home?: HomeE;
+	private marketManager?: MarketManager;
 
 	constructor(param: g.SceneParameterObject) {
 		super({
@@ -29,6 +31,12 @@ export class MainScene extends BaseScene {
 		this.remainFrame = (this.game.vars as GameVars).totalTimeLimit * this.game.fps;
 		this.lastRemainSec = Math.floor(this.remainFrame / this.game.fps);
 		this.onLoad.add(() => {
+			// Initialize MarketManager for price management
+			const gameVars = this.game.vars as GameVars;
+			const mode = gameVars.mode || "ranking";
+			this.marketManager = new MarketManager(this, mode);
+			this.marketManager.initialize();
+
 			// Initialize multi-player broadcast handlers immediately to prevent race conditions
 			this.initializeMessageHandlers();
 
@@ -120,8 +128,17 @@ export class MainScene extends BaseScene {
 					// Update purchase count for all players
 					this.updateAffiliatePurchaseCount(purchaseData.postId);
 				}
+
+				// Price updates are handled automatically by MarketManager instances
 			});
 		}
+	}
+
+	/**
+	 * Gets the MarketManager instance
+	 */
+	getMarketManager(): MarketManager | undefined {
+		return this.marketManager;
 	}
 
 	/**

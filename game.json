@@ -220,6 +220,11 @@
 			"type": "script",
 			"path": "script/data/affiliateMessages.js",
 			"global": true
+		},
+		"marketManager": {
+			"type": "script",
+			"path": "script/manager/marketManager.js",
+			"global": true
 		}
 	},
 	"environment": {

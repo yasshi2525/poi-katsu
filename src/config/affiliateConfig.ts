@@ -9,9 +9,9 @@ export const AFFILIATE_CONFIG = {
 	/** Dynamic pricing configuration */
 	PRICING: {
 		/** Minimum price ratio relative to base price */
-		MIN_PRICE_RATIO: 0.5,
-		/** Price volatility factor for time-based fluctuation */
-		VOLATILITY: 0.3,
+		MIN_PRICE_RATIO: 0.3,
+		/** Price volatility factor for time-based fluctuation (increased for more dramatic changes) */
+		VOLATILITY: 0.8,
 		/** Total game time in seconds for price calculations */
 		TOTAL_GAME_TIME: 120,
 	},

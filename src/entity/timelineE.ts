@@ -412,7 +412,7 @@ export class TimelineE extends g.E {
 			postId: postId,
 			buyerId: this.scene.game.selfId || "unknown",
 			buyerName: buyerName,
-			sharerId: sharedPost.sharerName, // Note: This should be the actual player ID, may need mapping
+			sharerId: sharedPost.sharerId, // Use sharerId instead of sharerName for proper ID comparison
 			rewardPoints: affiliateReward
 		};
 
