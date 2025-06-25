@@ -1,42 +1,51 @@
+import { GameContext } from "../../src/data/gameContext";
 import { ProfileEditorE, ProfileData } from "../../src/entity/profileEditorE";
 import { LabelButtonE } from "../../src/entity/labelButtonE";
 import { RadioButtonGroupE } from "../../src/entity/radioButtonGroupE";
 
+// Mock resolvePlayerInfo from @akashic-extension/resolve-player-info
+jest.mock("@akashic-extension/resolve-player-info", () => ({
+	resolvePlayerInfo: jest.fn(),
+}));
+
+// Import the mocked function
+import { resolvePlayerInfo } from "@akashic-extension/resolve-player-info";
+
 describe("ProfileEditorE", () => {
 	let profileEditor: ProfileEditorE;
 	let submittedData: ProfileData | null = null;
+	let mockResolvePlayerInfo: jest.MockedFunction<typeof resolvePlayerInfo>;
 
 	beforeEach(() => {
 		// Reset submitted data
 		submittedData = null;
 
+		// Set up mock for resolvePlayerInfo
+		mockResolvePlayerInfo = resolvePlayerInfo as jest.MockedFunction<typeof resolvePlayerInfo>;
+		mockResolvePlayerInfo.mockClear();
+
 		// Initialize game variables with proper playerProfile structure
 		const gameVars: GameVars = {
-			mode: "ranking", // Use ranking mode for synchronous button behavior
-			totalTimeLimit: 100,
 			gameState: {
 				score: 0,
 			},
-			playerProfile: {
-				name: "プレイヤー",
-				avatar: "😀",
-			},
-			allPlayersProfiles: {},
-			allPlayersScores: {},
 		};
 		scene.game.vars = gameVars;
+
+		// Create GameContext for testing
+		const gameContext = GameContext.createForTesting("test-player", "ranking");
 
 		// Create ProfileEditorE instance using global scene
 		profileEditor = new ProfileEditorE({
 			scene: scene,
+			gameContext: gameContext,
 			width: scene.game.width,
 			height: scene.game.height,
 			onComplete: () => {
-				// ProfileEditorE now updates gameVars directly, so read from there
-				const gameVars = scene.game.vars as GameVars;
+				// ProfileEditorE now updates game context directly, so read from there
 				submittedData = {
-					name: gameVars.playerProfile.name,
-					avatar: gameVars.playerProfile.avatar,
+					name: gameContext.currentPlayer.profile.name,
+					avatar: gameContext.currentPlayer.profile.avatar,
 				};
 			},
 		});
@@ -135,7 +144,7 @@ describe("ProfileEditorE", () => {
 
 			// Verify submitted data
 			expect(submittedData).not.toBeNull();
-			expect(submittedData!.name).toBe("プレイヤー");
+			expect(submittedData!.name).toBe("プレイヤー"); // From GameContext
 			expect(submittedData!.avatar).toBe("😀"); // Default avatar
 		});
 
@@ -152,7 +161,7 @@ describe("ProfileEditorE", () => {
 
 			// Verify submitted data includes selected avatar
 			expect(submittedData).not.toBeNull();
-			expect(submittedData!.name).toBe("プレイヤー");
+			expect(submittedData!.name).toBe("プレイヤー"); // From GameContext
 			expect(submittedData!.avatar).toBe("🥰");
 		});
 	});
@@ -193,12 +202,15 @@ describe("ProfileEditorE", () => {
 	});
 
 	describe("multi-player broadcasting", () => {
+		let multiGameContext: GameContext;
+
 		beforeEach(() => {
 			// Set up multi mode for broadcasting tests
-			const gameVars = scene.game.vars as GameVars;
-			gameVars.mode = "multi";
 			// Mock selfId for testing
-			(scene.game as any).selfId = "player1";
+			scene.game.selfId = "player1";
+
+			// Create multi-player GameContext
+			multiGameContext = GameContext.createForTesting(scene.game.selfId, "multi");
 		});
 
 		it("should broadcast profile on initialization in multi mode", () => {
@@ -216,6 +228,7 @@ describe("ProfileEditorE", () => {
 			// Create new ProfileEditorE to trigger initialization broadcast
 			const testProfileEditor = new ProfileEditorE({
 				scene: scene,
+				gameContext: multiGameContext,
 				width: scene.game.width,
 				height: scene.game.height,
 				onComplete: () => {},
@@ -225,8 +238,8 @@ describe("ProfileEditorE", () => {
 			expect(broadcastedMessage).not.toBeNull();
 			expect(broadcastedMessage.type).toBe("profileUpdate");
 			expect(broadcastedMessage.profileData.playerId).toBe("player1");
-			expect(broadcastedMessage.profileData.name).toBe(gameVars.playerProfile.name);
-			expect(broadcastedMessage.profileData.avatar).toBe(gameVars.playerProfile.avatar);
+			expect(broadcastedMessage.profileData.name).toBe("プレイヤー"); // From GameContext
+			expect(broadcastedMessage.profileData.avatar).toBe("😀"); // From GameContext
 
 			// Cleanup
 			testProfileEditor.destroy();
@@ -234,7 +247,8 @@ describe("ProfileEditorE", () => {
 		});
 
 		it("should receive and store other players' profile broadcasts", () => {
-			const gameVars = scene.game.vars as GameVars;
+			// Import createPlayerData for test
+			const { createPlayerData } = require("../../src/data/playerData");
 
 			// Set up message handlers directly on test scene (simulating MainScene behavior)
 			scene.onMessage.add((ev: g.MessageEvent) => {
@@ -242,10 +256,22 @@ describe("ProfileEditorE", () => {
 				if (ev.data?.type === "profileUpdate" && ev.data?.profileData) {
 					const profileData = ev.data.profileData;
 					if (profileData.playerId && profileData.playerId !== scene.game.selfId) {
-						gameVars.allPlayersProfiles[profileData.playerId] = {
-							name: profileData.name,
-							avatar: profileData.avatar,
-						};
+						// Add new player to GameContext if not exists
+						if (!multiGameContext.allPlayers.has(profileData.playerId)) {
+							const newPlayer = createPlayerData(
+								profileData.playerId,
+								{ name: profileData.name, avatar: profileData.avatar },
+								0
+							);
+							multiGameContext.addPlayer(profileData.playerId, newPlayer);
+						}
+						else {
+							// Update existing player profile
+							multiGameContext.updatePlayerProfile(profileData.playerId, {
+								name: profileData.name,
+								avatar: profileData.avatar,
+							});
+						}
 					}
 				}
 			});
@@ -253,6 +279,7 @@ describe("ProfileEditorE", () => {
 			// Create ProfileEditorE instance for testing
 			const testProfileEditor = new ProfileEditorE({
 				scene: scene,
+				gameContext: multiGameContext,
 				width: scene.game.width,
 				height: scene.game.height,
 				onComplete: () => {},
@@ -273,10 +300,11 @@ describe("ProfileEditorE", () => {
 			// Trigger the message handler
 			scene.onMessage.fire(mockMessage as any);
 
-			// Verify the other player's profile was stored
-			expect(gameVars.allPlayersProfiles["player2"]).toBeDefined();
-			expect(gameVars.allPlayersProfiles["player2"].name).toBe("他のプレイヤー");
-			expect(gameVars.allPlayersProfiles["player2"].avatar).toBe("😎");
+			// Verify the other player's profile was stored in GameContext
+			const player2 = multiGameContext.allPlayers.get("player2");
+			expect(player2).toBeDefined();
+			expect(player2!.profile.name).toBe("他のプレイヤー");
+			expect(player2!.profile.avatar).toBe("😎");
 
 			// Cleanup
 			testProfileEditor.destroy();
@@ -288,6 +316,7 @@ describe("ProfileEditorE", () => {
 			// Create ProfileEditorE instance with profile change callback
 			const testProfileEditor = new ProfileEditorE({
 				scene: scene,
+				gameContext: multiGameContext,
 				width: scene.game.width,
 				height: scene.game.height,
 				onComplete: () => {},
@@ -308,12 +337,20 @@ describe("ProfileEditorE", () => {
 			testProfileEditor.destroy();
 		});
 
-		it("should call onProfileChange callback when name changes via playerInfo", () => {
+		it("should call onProfileChange callback when name changes via resolvePlayerInfo", () => {
+			// Set up mock resolvePlayerInfo to simulate successful name change
+			mockResolvePlayerInfo.mockImplementation((_opts, callback?) => {
+				if (callback) {
+					callback(null, { name: "新しい名前", userData: {} });
+				}
+			});
+
 			let profileChangeCallCount = 0;
 
 			// Create ProfileEditorE instance with profile change callback
 			const testProfileEditor = new ProfileEditorE({
 				scene: scene,
+				gameContext: multiGameContext,
 				width: scene.game.width,
 				height: scene.game.height,
 				onComplete: () => {},
@@ -322,16 +359,23 @@ describe("ProfileEditorE", () => {
 				},
 			});
 
-			// Simulate receiving a playerInfo event for current player
-			const mockPlayerInfoEvent = {
-				player: {
-					id: "player1",
-					name: "新しい名前",
-				},
-			};
+			// Find and click the name button to trigger resolvePlayerInfo
+			const nameButtonBg = testProfileEditor.children?.find(child =>
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+			) as g.FilledRect;
+			expect(nameButtonBg).toBeDefined();
 
-			// Trigger the playerInfo handler
-			scene.game.onPlayerInfo.fire(mockPlayerInfoEvent as any);
+			// Simulate clicking the name button
+			nameButtonBg.onPointDown.fire({
+				type: "point-down",
+				eventFlags: 0,
+				player: undefined,
+				point: { x: 100, y: 160 },
+				pointerId: 0,
+				button: 0,
+				target: nameButtonBg,
+				local: true,
+			});
 
 			// Verify callback was called
 			expect(profileChangeCallCount).toBe(1);
@@ -340,35 +384,165 @@ describe("ProfileEditorE", () => {
 			testProfileEditor.destroy();
 		});
 
-		it("should update name button text when player name is received", () => {
+		it("should update name button text when player name is resolved", () => {
+			// Set up mock resolvePlayerInfo to simulate successful name resolution
+			mockResolvePlayerInfo.mockImplementation((_opts, callback?) => {
+				if (callback) {
+					callback(null, { name: "解決されたプレイヤー名", userData: {} });
+				}
+			});
+
 			// Create ProfileEditorE instance
 			const testProfileEditor = new ProfileEditorE({
 				scene: scene,
+				gameContext: multiGameContext,
 				width: scene.game.width,
 				height: scene.game.height,
 				onComplete: () => {},
 			});
 
-			// Find the name button text
-			const nameButtonText = testProfileEditor.children?.find(child =>
+			// Find the initial name button text
+			const initialNameButtonText = testProfileEditor.children?.find(child =>
 				child instanceof g.Label && child.text === "名前を設定する"
 			) as g.Label;
-			expect(nameButtonText).toBeDefined();
-			expect(nameButtonText.text).toBe("名前を設定する");
+			expect(initialNameButtonText).toBeDefined();
+			expect(initialNameButtonText.text).toBe("名前を設定する");
 
-			// Simulate receiving a playerInfo event for current player with new name
-			const mockPlayerInfoEvent = {
-				player: {
-					id: "player1",
-					name: "テストプレイヤー",
+			// Find and click the name button to trigger resolvePlayerInfo
+			const nameButtonBg = testProfileEditor.children?.find(child =>
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+			) as g.FilledRect;
+			expect(nameButtonBg).toBeDefined();
+
+			// Simulate clicking the name button
+			nameButtonBg.onPointDown.fire({
+				type: "point-down",
+				eventFlags: 0,
+				player: undefined,
+				point: { x: 100, y: 160 },
+				pointerId: 0,
+				button: 0,
+				target: nameButtonBg,
+				local: true,
+			});
+
+			// Find the updated name button text
+			const updatedNameButtonText = testProfileEditor.children?.find(child =>
+				child instanceof g.Label && child.text === "解決されたプレイヤー名"
+			) as g.Label;
+			expect(updatedNameButtonText).toBeDefined();
+
+			// Cleanup
+			testProfileEditor.destroy();
+		});
+
+		it("should use resolvePlayerInfo when name button clicked in multi mode", () => {
+			// Set up mock resolvePlayerInfo to simulate successful player name resolution
+			mockResolvePlayerInfo.mockImplementation((_opts, callback?) => {
+				// Simulate successful resolution with player name
+				if (callback) {
+					callback(null, { name: "新しいプレイヤー名", userData: {} });
+				}
+			});
+
+			let profileChangeCallCount = 0;
+
+			// Create ProfileEditorE instance in multi mode with profile change callback
+			const testProfileEditor = new ProfileEditorE({
+				scene: scene,
+				gameContext: multiGameContext,
+				width: scene.game.width,
+				height: scene.game.height,
+				onComplete: () => {},
+				onProfileChange: () => {
+					profileChangeCallCount++;
 				},
-			};
+			});
 
-			// Trigger the playerInfo handler
-			scene.game.onPlayerInfo.fire(mockPlayerInfoEvent as any);
+			// Find the name button background (clickable area)
+			const nameButtonBg = testProfileEditor.children?.find(child =>
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+			) as g.FilledRect;
+			expect(nameButtonBg).toBeDefined();
 
-			// Verify the name button text was updated
-			expect(nameButtonText.text).toBe("テストプレイヤー");
+			// Simulate clicking the name button
+			nameButtonBg.onPointDown.fire({
+				type: "point-down",
+				eventFlags: 0,
+				player: undefined,
+				point: { x: 100, y: 160 },
+				pointerId: 0,
+				button: 0,
+				target: nameButtonBg,
+				local: true,
+			});
+
+			// Verify that resolvePlayerInfo was called
+			expect(mockResolvePlayerInfo).toHaveBeenCalledTimes(1);
+			expect(mockResolvePlayerInfo).toHaveBeenCalledWith({}, expect.any(Function));
+
+			// Verify that the player name was updated in GameContext
+			expect(multiGameContext.currentPlayer.profile.name).toBe("新しいプレイヤー名");
+
+			// Verify that onProfileChange callback was called
+			expect(profileChangeCallCount).toBe(1);
+
+			// Find the name button text and verify it was updated
+			const nameButtonText = testProfileEditor.children?.find(child =>
+				child instanceof g.Label && child.text === "新しいプレイヤー名"
+			) as g.Label;
+			expect(nameButtonText).toBeDefined();
+
+			// Cleanup
+			testProfileEditor.destroy();
+		});
+
+		it("should handle resolvePlayerInfo errors gracefully", () => {
+			// Set up mock resolvePlayerInfo to simulate error
+			mockResolvePlayerInfo.mockImplementation((_opts, callback?) => {
+				// Simulate error in resolution
+				if (callback) {
+					callback(new Error("Failed to resolve player info"));
+				}
+			});
+
+			// Create ProfileEditorE instance in multi mode
+			const testProfileEditor = new ProfileEditorE({
+				scene: scene,
+				gameContext: multiGameContext,
+				width: scene.game.width,
+				height: scene.game.height,
+				onComplete: () => {},
+			});
+
+			// Store initial player name
+			const initialPlayerName = multiGameContext.currentPlayer.profile.name;
+
+			// Find the name button background (clickable area)
+			const nameButtonBg = testProfileEditor.children?.find(child =>
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+			) as g.FilledRect;
+			expect(nameButtonBg).toBeDefined();
+
+			// Simulate clicking the name button
+			expect(() => {
+				nameButtonBg.onPointDown.fire({
+					type: "point-down",
+					eventFlags: 0,
+					player: undefined,
+					point: { x: 100, y: 160 },
+					pointerId: 0,
+					button: 0,
+					target: nameButtonBg,
+					local: true,
+				});
+			}).not.toThrow();
+
+			// Verify that resolvePlayerInfo was called
+			expect(mockResolvePlayerInfo).toHaveBeenCalledTimes(1);
+
+			// Verify that player name remains unchanged when there's an error
+			expect(multiGameContext.currentPlayer.profile.name).toBe(initialPlayerName);
 
 			// Cleanup
 			testProfileEditor.destroy();

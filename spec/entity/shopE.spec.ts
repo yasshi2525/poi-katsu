@@ -1,3 +1,4 @@
+import { GameContext } from "../../src/data/gameContext";
 import { ShopE } from "../../src/entity/shopE";
 import { ItemManager } from "../../src/manager/itemManager";
 import { MarketManager } from "../../src/manager/marketManager";
@@ -35,13 +36,17 @@ describe("ShopE", () => {
 		// Create item manager with test data
 		itemManager = new ItemManager();
 
+		// Create GameContext for testing
+		const gameContext = GameContext.createForTesting("test-player", "ranking");
+
 		// Create market manager for price management
-		marketManager = new MarketManager(scene, "ranking");
+		marketManager = new MarketManager(scene, gameContext);
 		marketManager.initialize();
 
 		// Create shop instance
 		shop = new ShopE({
 			scene: scene,
+			multi: false,
 			width: scene.game.width,
 			height: scene.game.height,
 			itemManager: itemManager,
@@ -379,6 +384,147 @@ describe("ShopE", () => {
 				(child as any).cssColor === "#2c3e50" // Header color
 			);
 			expect(headerElements?.length).toBeGreaterThan(0);
+		});
+	});
+
+	describe("Price Update Listener Pattern", () => {
+		it("should register price update listener with MarketManager", () => {
+			// Verify that the shop registers a listener with the market manager
+			const addListenerSpy = jest.spyOn(marketManager, "addPriceUpdateListener");
+
+			// Create a new shop instance to trigger listener registration
+			const testShop = new ShopE({
+				scene: scene,
+				multi: false,
+				width: scene.game.width,
+				height: scene.game.height,
+				itemManager: itemManager,
+				marketManager: marketManager,
+				onCheckPoints: mockCheckPoints,
+				onDeductPoints: mockDeductPoints,
+				onItemPurchased: mockItemPurchased,
+				onGetRemainingTime: mockGetRemainingTime,
+				onIsTimelineRevealed: mockIsTimelineRevealed,
+				onShareProduct: mockShareProduct,
+				onSnsConnectionRequest: mockSnsConnectionRequest,
+			});
+
+			// Verify that addPriceUpdateListener was called
+			expect(addListenerSpy).toHaveBeenCalledWith(expect.any(Function));
+
+			// Cleanup
+			testShop.destroy();
+			addListenerSpy.mockRestore();
+		});
+
+		it("should remove price update listener on destroy", () => {
+			const removeListenerSpy = jest.spyOn(marketManager, "removePriceUpdateListener");
+
+			// Create a new shop instance
+			const testShop = new ShopE({
+				scene: scene,
+				multi: false,
+				width: scene.game.width,
+				height: scene.game.height,
+				itemManager: itemManager,
+				marketManager: marketManager,
+				onCheckPoints: mockCheckPoints,
+				onDeductPoints: mockDeductPoints,
+				onItemPurchased: mockItemPurchased,
+				onGetRemainingTime: mockGetRemainingTime,
+				onIsTimelineRevealed: mockIsTimelineRevealed,
+				onShareProduct: mockShareProduct,
+				onSnsConnectionRequest: mockSnsConnectionRequest,
+			});
+
+			// Destroy the shop
+			testShop.destroy();
+
+			// Verify that removePriceUpdateListener was called
+			expect(removeListenerSpy).toHaveBeenCalledWith(expect.any(Function));
+
+			removeListenerSpy.mockRestore();
+		});
+
+		it("should update price labels when MarketManager notifies listeners", () => {
+			// Spy on updateAllPriceLabels method
+			const updatePriceLabelsSpy = jest.spyOn(shop as any, "updateAllPriceLabels");
+
+			// Manually trigger the price update listener that should be registered
+			// Get the listener function that was registered
+			const listeners = (marketManager as any).priceUpdateListeners;
+			expect(listeners.length).toBeGreaterThan(0);
+
+			// Trigger the listener (simulating MarketManager price update)
+			const shopListener = listeners.find((listener: any) =>
+				listener.toString().includes("updateAllPriceLabels")
+			);
+			if (shopListener) {
+				shopListener();
+			}
+
+			// Verify that price labels were updated
+			expect(updatePriceLabelsSpy).toHaveBeenCalled();
+
+			updatePriceLabelsSpy.mockRestore();
+		});
+
+		it("should update purchase button args when prices change", () => {
+			// Get available items for testing
+			const availableItems = itemManager.getAvailableItems();
+			const testItem = availableItems[0];
+
+			// Get the purchase button for the test item
+			const purchaseButton = (shop as any).purchaseButtons.get(testItem.id);
+			expect(purchaseButton).toBeDefined();
+
+			// Store initial button args
+			const initialArgs = purchaseButton.msgArgs;
+			expect(initialArgs).toContain(testItem.id);
+
+			// Mock MarketManager to return a different price
+			const mockDynamicPrice = jest.spyOn(marketManager, "getDynamicPrice");
+			const newPrice = 999; // Different from initial price
+			mockDynamicPrice.mockReturnValue(newPrice);
+
+			// Trigger price update via the listener
+			(shop as any).updateAllPriceLabels();
+
+			// Verify that the button args were updated with the new price
+			const updatedArgs = purchaseButton.msgArgs;
+			expect(updatedArgs).toBe(`${testItem.id}_${newPrice}`);
+			expect(updatedArgs).not.toBe(initialArgs);
+
+			mockDynamicPrice.mockRestore();
+		});
+
+		it("should update share button args when prices change", () => {
+			// Get available items for testing
+			const availableItems = itemManager.getAvailableItems();
+			const testItem = availableItems[0];
+
+			// Get the share button for the test item
+			const shareButton = (shop as any).shareButtons.get(testItem.id);
+			expect(shareButton).toBeDefined();
+
+			// Store initial button args
+			const initialArgs = shareButton.msgArgs;
+			expect(initialArgs).toContain(testItem.id);
+
+			// Mock MarketManager to return a different price
+			const mockDynamicPrice = jest.spyOn(marketManager, "getDynamicPrice");
+			const newPrice = 888; // Different from initial price
+			mockDynamicPrice.mockReturnValue(newPrice);
+
+			// Trigger price update via the listener
+			(shop as any).updateAllPriceLabels();
+
+			// Verify that the share button args were updated with the new price
+			const updatedArgs = shareButton.msgArgs;
+			expect(updatedArgs).toBe(`${testItem.id}_${newPrice}`);
+			expect(updatedArgs).not.toBe(initialArgs);
+
+			mockDynamicPrice.mockRestore();
 		});
 	});
 });

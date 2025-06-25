@@ -1,3 +1,11 @@
+import { POINT_CONSTANTS } from "../manager/pointManager";
+
+/**
+ * When this instance is the active, no id was assigned by Akashic Engine.
+ * To simplify implmentation, we use a dummy ID to represent the active instance.
+ */
+export const DUMMY_ID_FOR_ACTIVE_INSTANCE = "<__active_instance_dummy_id__>";
+
 /**
  * Player profile information
  */
@@ -25,7 +33,7 @@ export interface TaskProgress {
  * Centralizes player state according to 1.1 データモデル設計
  */
 export interface PlayerData {
-	/** Unique player identifier (safe for button names) */
+	/** Unique player identifier given by Akashic Engine. When  */
 	id: string;
 	/** Player profile information (name, avatar) */
 	profile: PlayerProfile;
@@ -43,19 +51,25 @@ export interface PlayerData {
 	preSettlementItemCount?: number;
 }
 
+export function createInitialPlayerProfile(): PlayerProfile {
+	return {
+		name: "プレイヤー",
+		avatar: "😀" // Default emoji avatar
+	};
+}
+
 /**
  * Creates a new PlayerData instance with default values
+ * @param id Pre-defined player id by Akashic Engine
  * @param profile Initial player profile
  * @param currentTime Current timestamp (optional, defaults to 0 for testing)
  * @returns New PlayerData instance
  */
-export function createPlayerData(profile: PlayerProfile, currentTime: number = 0): PlayerData {
-	// Generate a safe, unique ID based on profile name with timestamp
-	const safeId = `player_${profile.name.replace(/[^a-zA-Z0-9]/g, "_")}_${currentTime}`;
+export function createPlayerData(id: string | undefined, profile: PlayerProfile, currentTime: number = 0): PlayerData {
 	return {
-		id: safeId,
+		id: id ?? DUMMY_ID_FOR_ACTIVE_INSTANCE, // Use dummy ID for active instance
 		profile: profile,
-		points: 500, // Initial points as per game specification
+		points: POINT_CONSTANTS.INITIAL_POINTS, // Initial points as per game specification
 		ownedItems: [],
 		taskProgress: new Map(),
 		joinedAt: currentTime,

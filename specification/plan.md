@@ -12,7 +12,6 @@
 - **GameContext**: ゲーム全体の状態管理
 
 ### 1.2 ゲーム進行管理システム
-- **GamePhaseManager**: ゲームの進行段階を管理
 - **TaskManager**: タスクの解禁・完了処理
 - **PointManager**: ポイント計算・加算処理
 - **ItemManager**: アイテム管理・セット判定

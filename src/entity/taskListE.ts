@@ -37,6 +37,8 @@ const ANIMATION_CONFIG = {
  * Parameter object for TaskList
  */
 export interface TaskListParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -55,6 +57,7 @@ export interface TaskListParameterObject extends g.EParameterObject {
 export class TaskListE extends g.E {
 	static assetIds: string[] = [...ModalE.assetIds];
 
+	private readonly multi: boolean;
 	private readonly tasks: TaskData[];
 	private readonly layout: LayoutConfig;
 	private readonly onTaskExecute?: (taskData: TaskData) => void;
@@ -69,6 +72,7 @@ export class TaskListE extends g.E {
 	constructor(options: TaskListParameterObject) {
 		super(options);
 
+		this.multi = options.multi;
 		this.tasks = options.tasks;
 		this.onTaskExecute = options.onTaskExecute;
 		this.onTaskComplete = options.onTaskComplete;
@@ -297,6 +301,7 @@ export class TaskListE extends g.E {
 		// Execute button using LabelButtonE
 		const executeBtn = new LabelButtonE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `executeTask_${task.id}`,
 			args: task.id, // Primitive string - safe to serialize
 			width: executeBtnLayout.width,
@@ -357,6 +362,7 @@ export class TaskListE extends g.E {
 
 		this.currentModal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `taskModal_${task.id}`,
 			args: task.id, // Primitive string - safe to serialize
 			title: "タスク実行",
@@ -443,6 +449,7 @@ export class TaskListE extends g.E {
 
 		this.currentModal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `successModal_${task.id}`,
 			args: task.id, // Primitive string - safe to serialize
 			title: "タスク完了",

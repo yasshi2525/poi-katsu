@@ -9,7 +9,7 @@ import {
 	getItemCategoryInfo
 } from "../data/itemData";
 import { ItemManager } from "../manager/itemManager";
-import { ScoreBroadcaster } from "../model/scoreBroadcaster";
+import { PointManager } from "../manager/pointManager";
 import { ItemConversionE } from "./itemConversionE";
 import { ModalE } from "./modalE";
 import { SettlementResultE } from "./settlementResultE";
@@ -65,13 +65,14 @@ export class SettlementE extends g.E {
 	private itemConversions: Map<string, ItemConversionE> = new Map();
 	private isAutomaticMode: boolean = false;
 	private isSettlementCompleting: boolean = false;
-	private scoreBroadcaster: ScoreBroadcaster;
+	private pointManager: PointManager;
 	private transitionToRanking: () => void;
 
 	constructor(param: {
 		scene: g.Scene;
 		gameContext: GameContext;
 		itemManager: ItemManager;
+		pointManager: PointManager;
 		transitionToRanking: () => void;
 	}) {
 		super({
@@ -86,7 +87,7 @@ export class SettlementE extends g.E {
 		this.transitionToRanking = param.transitionToRanking;
 		this.ownedItems = [];
 		this.setInfos = [];
-		this.scoreBroadcaster = new ScoreBroadcaster(param.scene);
+		this.pointManager = param.pointManager;
 
 		this.setupBackground();
 		this.setupHeader();
@@ -287,7 +288,7 @@ export class SettlementE extends g.E {
 			this.gameContext.updateCurrentPlayer(updatedPlayer);
 
 			// Broadcast the new score to other players so they see the settlement value
-			this.scoreBroadcaster.broadcastScore(newScore);
+			this.pointManager.broadcastScore(newScore);
 		}
 
 		// Show settlement result

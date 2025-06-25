@@ -1,3 +1,5 @@
+import { POINT_CONSTANTS } from "../manager/pointManager";
+
 /**
  * Task data interface representing a game task
  * Moved from entity/taskListE.ts to centralize data models
@@ -32,7 +34,7 @@ export interface TaskRequirement {
 /**
  * Task category for grouping related tasks
  */
-export type TaskCategory = "basic" | "profile" | "social" | "shopping" | "advanced" | "system";
+export type TaskCategory = "basic" | "profile" | "social" | "shopping" | "advanced" | "system" | "collection";
 
 /**
  * Extended task data with additional metadata
@@ -119,24 +121,40 @@ export function getDefaultGameTasks(): ExtendedTaskData[] {
 		id: "profile",
 		icon: "👤",
 		title: "プロフィール設定",
-		reward: "50ポイント",
-		rewardPoints: 50
+		reward: `${POINT_CONSTANTS.TASK_PROFILE_REWARD}ポイント`,
+		rewardPoints: POINT_CONSTANTS.TASK_PROFILE_REWARD
 	});
 
 	const snsTask = createTaskData({
 		id: "sns",
 		icon: "📱",
 		title: "SNS連携",
-		reward: "100ポイント",
-		rewardPoints: 100
+		reward: `${POINT_CONSTANTS.TASK_SNS_REWARD}ポイント`,
+		rewardPoints: POINT_CONSTANTS.TASK_SNS_REWARD
 	});
 
 	const shoppingTask = createTaskData({
 		id: "shopping",
 		icon: "🛒",
 		title: "通販利用",
-		reward: "100ポイント",
-		rewardPoints: 100
+		reward: `${POINT_CONSTANTS.TASK_SHOPPING_REWARD}ポイント`,
+		rewardPoints: POINT_CONSTANTS.TASK_SHOPPING_REWARD
+	});
+
+	const novelCollectionTask = createTaskData({
+		id: "novel_collection",
+		icon: "📖",
+		title: "小説コレクション完成",
+		reward: `${POINT_CONSTANTS.SERIES_COLLECTION_BONUS}ポイント`,
+		rewardPoints: POINT_CONSTANTS.SERIES_COLLECTION_BONUS
+	});
+
+	const mangaCollectionTask = createTaskData({
+		id: "manga_collection",
+		icon: "📚",
+		title: "マンガコレクション完成",
+		reward: `${POINT_CONSTANTS.SERIES_COLLECTION_BONUS}ポイント`,
+		rewardPoints: POINT_CONSTANTS.SERIES_COLLECTION_BONUS
 	});
 
 	return [
@@ -160,6 +178,20 @@ export function getDefaultGameTasks(): ExtendedTaskData[] {
 			prerequisites: [{ taskId: "profile", required: true, unlocks: "Shopping features" }],
 			unlocks: ["shop", "item_management"],
 			priority: 3
+		}),
+		createExtendedTaskData(novelCollectionTask, {
+			category: "collection",
+			description: "小説シリーズの全巻を集めてコレクションを完成させます",
+			prerequisites: [{ taskId: "shopping", required: true, unlocks: "Collection features" }],
+			unlocks: ["collection_bonus"],
+			priority: 4
+		}),
+		createExtendedTaskData(mangaCollectionTask, {
+			category: "collection",
+			description: "マンガシリーズの全巻を集めてコレクションを完成させます",
+			prerequisites: [{ taskId: "shopping", required: true, unlocks: "Collection features" }],
+			unlocks: ["collection_bonus"],
+			priority: 5
 		})
 	];
 }

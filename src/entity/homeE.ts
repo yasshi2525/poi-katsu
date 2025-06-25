@@ -6,8 +6,8 @@ import { createSharedPost, SharedPostData } from "../data/sharedPostData";
 import { TaskData } from "../data/taskData";
 import { ItemManager } from "../manager/itemManager";
 import { MarketManager } from "../manager/marketManager";
+import { PointManager, POINT_CONSTANTS } from "../manager/pointManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
-import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AdBannerE, BannerData } from "./adBannerE";
 import { AppListE } from "./appListE";
 import { HeaderE } from "./headerE";
@@ -51,6 +51,8 @@ export interface HomeParameterObject extends g.EParameterObject {
 	gameContext: GameContext;
 	/** Market manager instance for price management */
 	marketManager: MarketManager;
+	/** Point manager instance for centralized point management */
+	pointManager: PointManager;
 	/** Function to update current player score in MainScene */
 	updateCurrentPlayerScore: (score: number) => void;
 	/** Function to transition to ranking scene */
@@ -74,13 +76,14 @@ export class HomeE extends g.E {
 	private profileEditor?: ProfileEditorE;
 	private shop?: ShopE;
 	private settlement?: SettlementE;
-	private scoreBroadcaster?: ScoreBroadcaster;
+	private pointManager!: PointManager;
 	private currentModal?: ModalE<string>;
+	private swipeOverlay?: g.FilledRect;
 
 	// Management systems
 	private taskManager!: TaskManager;
 	private itemManager!: ItemManager;
-	private gameContext!: GameContext;
+	private gameContext: GameContext;
 	private marketManager!: MarketManager;
 
 	// MainScene function callbacks
@@ -97,45 +100,58 @@ export class HomeE extends g.E {
 
 	// Affiliate system
 	private postIdCounter: number = 0;
+	private timestampCounter: number = 0;
 
 
 	// Banner data
 	private readonly banners: BannerData[] = [
 		{
-			id: "sale_campaign",
+			id: "welcome_ad",
 			priority: 1,
-			title: "今だけ限定セール！",
-			subtitle: "タップして詳細を見る",
-			saleTag: "タップで50ptゲット！",
-			backgroundColor: "#2c3e50",
-			titleColor: "#f1c40f",
-			subtitleColor: "white",
-			saleTagColor: "#f39c12",
-			clickHandler: () => this.onBannerClick("sale_campaign")
-		},
-		{
-			id: "new_feature",
-			priority: 2,
-			title: "新機能リリース！",
-			subtitle: "アフィリエイト機能を試してみよう",
-			saleTag: "NEW!",
-			backgroundColor: "#8e44ad",
-			titleColor: "#ecf0f1",
-			subtitleColor: "#bdc3c7",
-			saleTagColor: "#e74c3c",
-			clickHandler: () => this.onBannerClick("new_feature")
-		},
-		{
-			id: "point_bonus",
-			priority: 3,
-			title: "ボーナスポイント実施中",
-			subtitle: "今なら2倍ポイント還元",
-			saleTag: "2倍!",
-			backgroundColor: "#27ae60",
+			title: "ポイ活ウォーズへようこそ！",
+			subtitle: "広告をタップしてさらにポイントゲット",
+			saleTag: "タップで100ptゲット！",
+			backgroundColor: "#3498db",
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
-			saleTagColor: "#e67e22",
-			clickHandler: () => this.onBannerClick("point_bonus")
+			saleTagColor: "#f1c40f",
+			clickHandler: () => this.onBannerClick("welcome_ad")
+		},
+		{
+			id: "shopping_recommend",
+			priority: 2,
+			title: "通販でもっとポイント！",
+			subtitle: "商品購入でポイント大量獲得",
+			saleTag: "お得！",
+			backgroundColor: "#e67e22",
+			titleColor: "white",
+			subtitleColor: "#ecf0f1",
+			saleTagColor: "#f39c12",
+			clickHandler: () => this.onBannerClick("shopping_recommend")
+		},
+		{
+			id: "sale_notification",
+			priority: 3,
+			title: "セール開催中！",
+			subtitle: "今すぐ通販をチェック",
+			saleTag: "限定！",
+			backgroundColor: "#e74c3c",
+			titleColor: "white",
+			subtitleColor: "#ecf0f1",
+			saleTagColor: "#f1c40f",
+			clickHandler: () => this.onBannerClick("sale_notification")
+		},
+		{
+			id: "sns_recommend",
+			priority: 4,
+			title: "SNS連携でもっとお得！",
+			subtitle: "商品シェアでポイント還元",
+			saleTag: "シェア！",
+			backgroundColor: "#9b59b6",
+			titleColor: "white",
+			subtitleColor: "#ecf0f1",
+			saleTagColor: "#f1c40f",
+			clickHandler: () => this.onBannerClick("sns_recommend")
 		}
 	];
 
@@ -152,20 +168,15 @@ export class HomeE extends g.E {
 		this.screenHeight = options.height;
 		this.gameContext = options.gameContext;
 		this.marketManager = options.marketManager;
+		this.pointManager = options.pointManager;
 		this.updateCurrentPlayerScore = options.updateCurrentPlayerScore;
 		this.transitionToRanking = options.transitionToRanking;
-
-		// Initialize game variables
-		const gameVars = options.scene.game.vars as GameVars;
-		const remainingSec = gameVars.totalTimeLimit;
-		const score = gameVars.gameState.score;
 
 		// Initialize managers
 		this.initializeItemManager();
 		this.initializeTaskManager();
 
-		this.createComponents(options.width, options.height, score, remainingSec);
-		this.initializeScoreBroadcaster(score);
+		this.createComponents(options.width, options.height);
 	}
 
 	/**
@@ -173,31 +184,28 @@ export class HomeE extends g.E {
 	 * @returns Current score
 	 */
 	getScore(): number {
-		return this.header.getScore();
+		return this.pointManager.getCurrentPoints();
 	}
 
 	/**
-	 * Adds points to the score
+	 * Adds points to the score with specific source categorization
 	 * @param points Points to add
+	 * @param source Source category (e.g., "ads", "affiliate", "shopping", "tasks")
+	 * @param description Detailed description of the point source
 	 */
-	addScore(points: number): void {
-		const currentScore = this.header.getScore();
-		const newScore = currentScore + points;
-
-		// Update game vars to keep score synchronized
-		const gameVars = this.scene.game.vars as GameVars;
-		gameVars.gameState.score = newScore;
+	addScore(points: number, source: string = "other", description: string = "Points added during gameplay"): void {
+		if (points > 0) {
+			this.pointManager.awardPoints(points, source, description);
+		} else if (points < 0) {
+			this.pointManager.deductPoints(-points, source, description);
+		}
 
 		// Update header display
+		const newScore = this.pointManager.getCurrentPoints();
 		this.header.setScore(newScore);
 
-		// Update score in GameContext for settlement consistency
+		// Update score in MainScene for consistency
 		this.updateCurrentPlayerScore(newScore);
-
-		// Broadcast score to other participants
-		if (this.scoreBroadcaster) {
-			this.scoreBroadcaster.broadcastScore(newScore);
-		}
 	}
 
 	/**
@@ -262,7 +270,7 @@ export class HomeE extends g.E {
 	 * Awards affiliate reward points to the current player
 	 */
 	awardAffiliateReward(rewardPoints: number, buyerName?: string): void {
-		this.addScore(rewardPoints);
+		this.addScore(rewardPoints, "affiliate", `Affiliate commission from ${buyerName || "他のプレイヤー"}`);
 		// Use non-blocking notification bar instead of modal
 		this.showAffiliateRewardNotification(rewardPoints, buyerName || "他のプレイヤー");
 	}
@@ -307,6 +315,10 @@ export class HomeE extends g.E {
 
 		// The settlement app is made non-touchable during auto-reveal to avoid unintentional behavior
 		// The highlighting effect will automatically open the settlement app
+
+		// hide all other app windows
+		this.shop?.hide();
+		this.profileEditor?.hide();
 	}
 
 	/**
@@ -342,7 +354,8 @@ export class HomeE extends g.E {
 			scene: this.scene,
 			screenWidth: this.screenWidth,
 			screenHeight: this.screenHeight,
-			onScoreAdd: (points: number) => this.addScore(points),
+			gameContext: this.gameContext,
+			onScoreAdd: (points: number, taskData: TaskData) => this.addScore(points, "tasks", `${taskData.title} completion reward`),
 			onProfileSwitch: () => this.switchToProfileEditor(),
 			onTimelineReveal: () => this.revealTimeline(),
 			onShopAppReveal: () => this.appList.revealShopApp(),
@@ -372,12 +385,13 @@ export class HomeE extends g.E {
 	/**
 	 * Creates all component sections
 	 */
-	private createComponents(width: number, height: number, score: number, remainingSec: number): void {
+	private createComponents(width: number, height: number): void {
 		// Note: header is created at scene level, not here
 
 		// Create ad banner (adjusted for header and item list)
 		this.adBanner = new AdBannerE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
 			height: height - 140, // Reduced by item list height
 			banners: this.banners,
@@ -388,6 +402,7 @@ export class HomeE extends g.E {
 		// Create task list (adjusted for header and item list) - now using TaskManager's tasks
 		this.taskList = new TaskListE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
 			height: height - 140, // Reduced by item list height
 			tasks: this.taskManager.getTasks(),
@@ -400,6 +415,7 @@ export class HomeE extends g.E {
 		// Create timeline (adjusted for header and item list, initially hidden)
 		this.timeline = new TimelineE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
 			height: height - 140, // Reduced by item list height
 			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
@@ -408,12 +424,11 @@ export class HomeE extends g.E {
 			onAffiliatePurchase: (postId: string, buyerName: string, rewardPoints: number) =>
 				this.handleAffiliatePurchase(postId, buyerName, rewardPoints),
 			onCheckPoints: () => this.getScore(),
-			onDeductPoints: (amount: number) => this.addScore(-amount),
+			onDeductPoints: (amount: number) => this.addScore(-amount, "shopping", "Item purchase"),
 			onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
 			onCheckOwnership: (itemId: string) => this.itemManager.ownsItem(itemId),
 			onGetPlayerName: () => {
-				const gameVars = this.scene.game.vars as GameVars;
-				return gameVars.playerProfile.name;
+				return this.gameContext.currentPlayer.profile.name;
 			}
 		});
 		this.timeline.hide();
@@ -442,13 +457,6 @@ export class HomeE extends g.E {
 		this.append(this.itemList);
 	}
 
-	/**
-	 * Initializes the score broadcaster for multi-player score synchronization
-	 */
-	private initializeScoreBroadcaster(initialScore: number): void {
-		this.scoreBroadcaster = new ScoreBroadcaster(this.scene);
-		this.scoreBroadcaster.initializeCurrentPlayerScore(initialScore);
-	}
 
 
 	/**
@@ -474,9 +482,13 @@ export class HomeE extends g.E {
 	private switchToProfileEditor(): void {
 		if (this.isProfileEditorVisible || this.profileEditor) return;
 
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
+
 		// Create profile editor positioned off-screen to the right
 		this.profileEditor = new ProfileEditorE({
 			scene: this.scene,
+			gameContext: this.gameContext,
 			width: this.screenWidth,
 			height: this.screenHeight,
 			x: this.screenWidth, // Start off-screen to the right
@@ -499,7 +511,11 @@ export class HomeE extends g.E {
 
 		// Animate ProfileEditor sliding in from the right
 		timeline.create(this.profileEditor)
-			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
+			});
 	}
 
 	/**
@@ -507,6 +523,9 @@ export class HomeE extends g.E {
 	 */
 	private switchBackToHome(): void {
 		if (!this.isProfileEditorVisible || !this.profileEditor) return;
+
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
 
 		// Create swipe animation: ProfileEditor slides right, HomeE slides in from left
 		const timeline = new Timeline(this.scene);
@@ -525,6 +544,8 @@ export class HomeE extends g.E {
 				this.isProfileEditorVisible = false;
 				// Complete the profile task using TaskManager
 				this.taskManager.completeProfileTask();
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -549,30 +570,15 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Updates the header with current profile data from gameVars
+	 * Updates the header with current profile data from GameContext
 	 */
 	private updateHeaderWithCurrentProfile(): void {
-		const gameVars = this.scene.game.vars as GameVars;
-		this.header.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
-
-		// Also update the GameContext with the new profile for ranking consistency
-		this.updateCurrentPlayerProfileInGameContext(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
-	}
-
-	/**
-	 * Updates current player profile in GameContext
-	 */
-	private updateCurrentPlayerProfileInGameContext(name: string, avatar: string): void {
-		if (!this.gameContext) return;
-
 		const currentPlayer = this.gameContext.currentPlayer;
-		const updatedPlayer = {
-			...currentPlayer,
-			profile: { name, avatar },
-			lastActiveAt: this.scene.game.age
-		};
-		this.gameContext.updateCurrentPlayer(updatedPlayer);
+		this.header.setPlayerProfile(currentPlayer.profile.name, currentPlayer.profile.avatar);
+
+		// GameContext profile is updated by ProfileEditorE directly, no need for additional update
 	}
+
 
 
 	/**
@@ -632,20 +638,33 @@ export class HomeE extends g.E {
 	 */
 	private onBannerClick(bannerId: string): void {
 		switch (bannerId) {
-			case "sale_campaign":
-				// Add 50 points for sale campaign
-				this.addScore(50);
-				// Switch to next banner
+			case "welcome_ad":
+				// Welcome ad: award points and switch to next banner
+				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Welcome ad banner click");
 				this.switchToNextBanner(bannerId);
 				break;
-			case "new_feature":
-				// Just switch to next banner for now
+			case "shopping_recommend":
+				// Shopping recommendation: execute shopping task action and award points
+				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Shopping recommendation banner click");
+				const shoppingTask = this.taskManager.getTask("shopping");
+				if (shoppingTask) {
+					this.taskManager.executeTask(shoppingTask);
+				}
 				this.switchToNextBanner(bannerId);
 				break;
-			case "point_bonus":
-				// Add bonus points
-				this.addScore(25);
-				// Switch to next banner
+			case "sale_notification":
+				// Sale notification: open shop app and award points
+				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Sale notification banner click");
+				this.switchToShop();
+				this.switchToNextBanner(bannerId);
+				break;
+			case "sns_recommend":
+				// SNS recommendation: execute SNS task action and award points
+				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "SNS recommendation banner click");
+				const snsTask = this.taskManager.getTask("sns");
+				if (snsTask) {
+					this.taskManager.executeTask(snsTask);
+				}
 				this.switchToNextBanner(bannerId);
 				break;
 			default:
@@ -755,6 +774,7 @@ export class HomeE extends g.E {
 
 			this.shop = new ShopE({
 				scene: this.scene,
+				multi: this.gameContext.gameMode.mode === "multi",
 				width: this.screenWidth,
 				height: this.screenHeight,
 				x: this.screenWidth, // Start off-screen to the right
@@ -762,7 +782,7 @@ export class HomeE extends g.E {
 				itemManager: this.itemManager,
 				marketManager: this.marketManager,
 				onCheckPoints: () => this.getScore(),
-				onDeductPoints: (amount: number) => this.addScore(-amount),
+				onDeductPoints: (amount: number) => this.addScore(-amount, "shopping", "Item purchase"),
 				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
 				onBack: () => this.switchBackFromShop(),
 				onGetRemainingTime: () => this.getRemainingTime(),
@@ -778,6 +798,9 @@ export class HomeE extends g.E {
 
 		this.isShopVisible = true;
 
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
+
 		// Create swipe animation: HomeE slides left, ShopE slides in from right
 		const timeline = new Timeline(this.scene);
 
@@ -789,7 +812,11 @@ export class HomeE extends g.E {
 
 		// Animate ShopE sliding in from the right
 		timeline.create(this.shop)
-			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
+			});
 	}
 
 	/**
@@ -797,6 +824,9 @@ export class HomeE extends g.E {
 	 */
 	private switchBackFromShop(): void {
 		if (!this.isShopVisible || !this.shop) return;
+
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
 
 		// Create swipe animation: ShopE slides right, HomeE slides in from left
 		const timeline = new Timeline(this.scene);
@@ -807,6 +837,8 @@ export class HomeE extends g.E {
 			.call(() => {
 				// Don't destroy shop - keep it for reuse, just mark as not visible
 				this.isShopVisible = false;
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -829,6 +861,7 @@ export class HomeE extends g.E {
 				scene: this.scene,
 				gameContext: this.gameContext,
 				itemManager: this.itemManager,
+				pointManager: this.pointManager,
 				transitionToRanking: this.transitionToRanking
 			});
 			this.settlement.x = this.screenWidth; // Start off-screen to the right
@@ -844,6 +877,9 @@ export class HomeE extends g.E {
 
 		this.isSettlementVisible = true;
 
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
+
 		// Create swipe animation: HomeE slides left, SettlementE slides in from right
 		const timeline = new Timeline(this.scene);
 
@@ -855,7 +891,11 @@ export class HomeE extends g.E {
 
 		// Animate SettlementE sliding in from the right
 		timeline.create(this.settlement)
-			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
+			});
 	}
 
 	/**
@@ -863,6 +903,9 @@ export class HomeE extends g.E {
 	 */
 	private switchBackFromSettlement(): void {
 		if (!this.isSettlementVisible || !this.settlement) return;
+
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
 
 		// Create swipe animation: SettlementE slides right, HomeE slides in from left
 		const timeline = new Timeline(this.scene);
@@ -873,6 +916,8 @@ export class HomeE extends g.E {
 			.call(() => {
 				// Don't destroy settlement - keep it for reuse, just mark as not visible
 				this.isSettlementVisible = false;
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -895,25 +940,24 @@ export class HomeE extends g.E {
 		updatedTaskProgress.set(taskId, {
 			taskId: taskId,
 			completed: true,
-			completedAt: this.scene.game.age
+			completedAt: this.getNextTimestamp()
 		});
 
 		const updatedPlayer = {
 			...currentPlayer,
 			taskProgress: updatedTaskProgress,
-			lastActiveAt: this.scene.game.age
+			lastActiveAt: this.getNextTimestamp()
 		};
 		this.gameContext.updateCurrentPlayer(updatedPlayer);
 
 		// Broadcast task completion to other players
-		const gameVars = this.scene.game.vars as GameVars;
-		if (gameVars.mode === "multi" && this.scene.game.selfId) {
+		if (this.gameContext.gameMode.mode === "multi") {
 			const message = {
 				type: "taskCompletion",
 				taskData: {
-					playerId: this.scene.game.selfId,
+					playerId: this.gameContext.currentPlayer.id,
 					taskId: taskId,
-					completedAt: this.scene.game.age
+					completedAt: this.getNextTimestamp()
 				}
 			};
 			this.scene.game.raiseEvent(new g.MessageEvent(message));
@@ -973,11 +1017,36 @@ export class HomeE extends g.E {
 
 	/**
 	 * Handles item purchase completion
-	 * @param _item The purchased item (unused but required for callback interface)
+	 * @param item The purchased item
 	 */
-	private onItemPurchased(_item: ItemData): void {
+	private onItemPurchased(item: ItemData): void {
 		// Refresh item list to show newly purchased item
 		this.itemList.refreshItems();
+
+		// Check for collection completion and auto-complete tasks
+		this.checkCollectionCompletion(item.category);
+	}
+
+	/**
+	 * Checks if collection is complete and auto-completes collection tasks
+	 * @param category The category of the purchased item
+	 */
+	private checkCollectionCompletion(category: string): void {
+		if (!this.itemManager.isCollectionComplete(category)) {
+			return;
+		}
+
+		// Find and complete the corresponding collection task
+		const taskId = `${category}_collection`;
+		const task = this.taskManager.getTask(taskId);
+
+		if (task && !task.completed) {
+			// Complete the collection task automatically
+			const result = this.taskManager.executeTask(task);
+			if (result.success) {
+				console.log(`Auto-completed collection task: ${taskId}`);
+			}
+		}
 	}
 
 	/**
@@ -991,24 +1060,23 @@ export class HomeE extends g.E {
 			return;
 		}
 
-		// Get current player name from game vars
-		const gameVars = this.scene.game.vars as GameVars;
-		const playerName = gameVars.playerProfile.name;
+		// Get current player name from GameContext
+		const playerName = this.gameContext.currentPlayer.profile.name;
 
 		// Create shared post
 		const postId = `affiliate_${++this.postIdCounter}`;
 		const sharedPost = createSharedPost({
 			id: postId,
-			sharerId: this.scene.game.selfId || "unknown",
+			sharerId: this.gameContext.currentPlayer.id,
 			sharerName: playerName,
 			item: item,
 			sharedPrice: sharedPrice,
-			sharedAt: this.scene.game.age
+			sharedAt: this.getNextTimestamp()
 		});
 
 		// Broadcast to all players
 		const affiliateMessage: AffiliateBroadcastMessage = {
-			playerId: this.scene.game.selfId || "unknown",
+			playerId: this.gameContext.currentPlayer.id,
 			playerName: playerName,
 			sharedPost: sharedPost
 		};
@@ -1121,5 +1189,42 @@ export class HomeE extends g.E {
 			this.currentModal.destroy();
 			this.currentModal = undefined;
 		}
+	}
+
+	/**
+	 * Creates a full screen overlay to prevent user interactions during swipe animations
+	 */
+	private createSwipeOverlay(): void {
+		if (this.swipeOverlay) return;
+
+		this.swipeOverlay = new g.FilledRect({
+			scene: this.scene,
+			width: this.screenWidth,
+			height: this.screenHeight,
+			x: 0,
+			y: 0,
+			cssColor: "transparent",
+			touchable: true, // Block all touch events
+			local: true
+		});
+
+		this.scene.append(this.swipeOverlay);
+	}
+
+	/**
+	 * Removes the full screen overlay after swipe animation completes
+	 */
+	private removeSwipeOverlay(): void {
+		if (this.swipeOverlay) {
+			this.swipeOverlay.destroy();
+			this.swipeOverlay = undefined;
+		}
+	}
+
+	/**
+	 * Gets the next incremental timestamp for consistent ordering
+	 */
+	private getNextTimestamp(): number {
+		return ++this.timestampCounter;
 	}
 }

@@ -2,6 +2,7 @@ import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { ItemData } from "../data/itemData";
 import { ItemManager } from "../manager/itemManager";
 import { MarketManager } from "../manager/marketManager";
+import { POINT_CONSTANTS } from "../manager/pointManager";
 import { LabelButtonE } from "./labelButtonE";
 import { ModalE } from "./modalE";
 
@@ -38,7 +39,7 @@ const SHOP_CONFIG = {
 	ERROR_COLOR: "#e74c3c",
 
 	// Point back system
-	POINT_BACK_RATE: 0.1, // 10% point back rate
+	POINT_BACK_RATE: POINT_CONSTANTS.SHOPPING_POINT_BACK_RATE, // 10% point back rate
 } as const;
 
 /**
@@ -56,6 +57,8 @@ interface LayoutConfig {
  * Parameter object for Shop
  */
 export interface ShopParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -87,6 +90,7 @@ export interface ShopParameterObject extends g.EParameterObject {
  * Shows product listings, categories, and purchase options
  */
 export class ShopE extends g.E {
+	private readonly multi: boolean;
 	private readonly layout: LayoutConfig;
 	private readonly itemManager: ItemManager;
 	private readonly marketManager: MarketManager;
@@ -102,6 +106,7 @@ export class ShopE extends g.E {
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
 	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
 	private priceLabels: Map<string, g.Label> = new Map(); // Store price labels for real-time updates
+	private priceUpdateListener?: () => void; // Listener for price updates from MarketManager
 
 	/**
 	 * Creates a new Shop instance
@@ -110,6 +115,7 @@ export class ShopE extends g.E {
 	constructor(options: ShopParameterObject) {
 		super(options);
 
+		this.multi = options.multi;
 		this.itemManager = options.itemManager;
 		this.marketManager = options.marketManager;
 		this.onCheckPoints = options.onCheckPoints;
@@ -123,8 +129,9 @@ export class ShopE extends g.E {
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
 
-		// Listen for UI update events from MarketManager
-		this.setupUIUpdateListener();
+		// Register for price update notifications from MarketManager
+		this.priceUpdateListener = () => this.updateAllPriceLabels();
+		this.marketManager.addPriceUpdateListener(this.priceUpdateListener);
 
 		// Immediately update price labels after setup to ensure current prices are displayed
 		this.updateAllPriceLabels();
@@ -148,6 +155,12 @@ export class ShopE extends g.E {
 	 * Cleanup method to clear intervals and resources
 	 */
 	override destroy(): void {
+		// Remove price update listener from MarketManager
+		if (this.priceUpdateListener) {
+			this.marketManager.removePriceUpdateListener(this.priceUpdateListener);
+			this.priceUpdateListener = undefined;
+		}
+
 		// Clear all stored references
 		this.purchaseButtons.clear();
 		this.shareButtons.clear();
@@ -304,24 +317,17 @@ export class ShopE extends g.E {
 	}
 
 	/**
-	 * Gets dynamic price from MarketManager cache only
+	 * Gets dynamic price from MarketManager according to game mode specification
 	 * @param item Item data for price lookup
-	 * @returns Dynamic price from MarketManager cache or fallback to base price
+	 * @returns Dynamic price (cached in multi mode, calculated in ranking mode)
 	 */
 	private getDynamicPrice(item: ItemData): number {
 		const remainingTime = Math.max(0, this.onGetRemainingTime());
 
-		// Always get price from MarketManager cache - never calculate directly
-		// This ensures all instances use the same synchronized price data
-		const marketPrice = this.marketManager.getDynamicPrice(item, remainingTime);
-
-		// If no cached price available, fallback to base price
-		if (!marketPrice || marketPrice <= 0) {
-			console.warn(`No cached price for item ${item.id}, using base price`);
-			return item.purchasePrice;
-		}
-
-		return marketPrice;
+		// MarketManager handles all pricing logic according to game mode specification
+		// In multi mode: uses cached prices from active instance broadcasts
+		// In ranking mode: calculates prices directly
+		return this.marketManager.getDynamicPrice(item, remainingTime);
 	}
 
 	/**
@@ -404,6 +410,7 @@ export class ShopE extends g.E {
 		// Buy button using LabelButtonE for proper multi-player support
 		const buyButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `shop_buy_${item.id}`,
 			args: `${item.id}_${dynamicPrice}`, // Include dynamic price in args
 			text: buttonText,
@@ -431,6 +438,7 @@ export class ShopE extends g.E {
 		const isTimelineRevealed = this.onIsTimelineRevealed();
 		const shareButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `shop_share_${item.id}`,
 			args: `${item.id}_${dynamicPrice}`,
 			text: "シェア",
@@ -620,6 +628,7 @@ export class ShopE extends g.E {
 
 		const modal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "purchaseConfirmModal",
 			args: `${item.id}|${dynamicPrice}`, // Use pipe separator to avoid underscore conflicts
 			title: "購入確認",
@@ -722,6 +731,7 @@ export class ShopE extends g.E {
 
 		const modal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "purchaseResultModal",
 			args: "",
 			title: isSuccess ? "購入完了" : "購入失敗",
@@ -754,6 +764,7 @@ export class ShopE extends g.E {
 
 		const modal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "snsRequirementModal",
 			args: "",
 			title: "SNS連携が必要です",
@@ -843,31 +854,42 @@ export class ShopE extends g.E {
 		this.createLayout();
 	}
 
-	/**
-	 * Sets up listener for UI update events from MarketManager
-	 */
-	private setupUIUpdateListener(): void {
-		this.scene.onMessage.add((ev: g.MessageEvent) => {
-			if (ev.data?.type === "uiPriceUpdate") {
-				this.updateAllPriceLabels();
-			}
-		});
-	}
 
 	/**
-	 * Updates all price labels with current dynamic prices
+	 * Updates all price labels, purchase button args, and share button args with current dynamic prices
+	 * This ensures that displayed prices and button arguments remain synchronized when prices change
 	 */
 	private updateAllPriceLabels(): void {
 		const availableItems = this.itemManager.getAvailableItems();
 
 		availableItems.forEach(item => {
+			const currentPrice = this.getDynamicPrice(item);
+
+			// Update price label
 			const priceLabel = this.priceLabels.get(item.id);
 			if (priceLabel) {
-				const currentPrice = this.getDynamicPrice(item);
 				const newText = `${currentPrice}pt`;
 				if (priceLabel.text !== newText) {
 					priceLabel.text = newText;
 					priceLabel.invalidate(); // Force redraw
+				}
+			}
+
+			// Update purchase button args to match current price
+			const purchaseButton = this.purchaseButtons.get(item.id);
+			if (purchaseButton) {
+				const newArgs = `${item.id}_${currentPrice}`;
+				if (purchaseButton.msgArgs !== newArgs) {
+					purchaseButton.msgArgs = newArgs;
+				}
+			}
+
+			// Update share button args to match current price
+			const shareButton = this.shareButtons.get(item.id);
+			if (shareButton) {
+				const newShareArgs = `${item.id}_${currentPrice}`;
+				if (shareButton.msgArgs !== newShareArgs) {
+					shareButton.msgArgs = newShareArgs;
 				}
 			}
 		});

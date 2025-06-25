@@ -25,7 +25,6 @@ export interface PointTransaction {
 
 /**
  * Score broadcast message data for multi-player synchronization
- * Maintains compatibility with existing ScoreBroadcaster
  */
 interface ScoreBroadcastMessage {
 	playerId: string;
@@ -33,23 +32,50 @@ interface ScoreBroadcastMessage {
 }
 
 /**
+ * Centralized point constants for game balance tuning
+ */
+export const POINT_CONSTANTS = {
+	// Initial player points
+	INITIAL_POINTS: 0,
+
+	// Task reward points
+	TASK_PROFILE_REWARD: 50,
+	TASK_SNS_REWARD: 100,
+	TASK_SHOPPING_REWARD: 100,
+	TASK_AGREEMENT_REWARD: 100,
+
+	// Series collection bonus points
+	SERIES_COLLECTION_BONUS: 1000,
+
+	// Ad banner reward points
+	AD_BANNER_CLICK_REWARD: 100,
+
+	// Banner specific rewards
+	BANNER_SALE_CAMPAIGN_REWARD: 50,
+	BANNER_POINT_BONUS_REWARD: 25,
+
+	// Shopping point back rate
+	SHOPPING_POINT_BACK_RATE: 0.1, // 10% point back rate
+
+	// Set completion bonus points
+	SET_CLOTHES_BONUS: 1000,
+	SET_ELECTRONICS_BONUS: 2500,
+} as const;
+
+/**
  * PointManager - Unified point calculation and management system
- * Merges ScoreBroadcaster functionality with enhanced point management
  * Implements 1.2 ゲーム進行管理システム according to plan.md
  */
 export class PointManager {
 	private gameContext: GameContext;
-	private scene: g.Scene;
+	private game: g.Game;
 	private transactions: PointTransaction[];
 	private transactionCounter: number = 0;
 
-	constructor(gameContext: GameContext, scene: g.Scene) {
+	constructor(gameContext: GameContext, game: g.Game) {
 		this.gameContext = gameContext;
-		this.scene = scene;
+		this.game = game;
 		this.transactions = [];
-
-		// Initialize current player score for multi-player mode
-		this.initializeCurrentPlayerScore();
 	}
 
 	/**
@@ -138,57 +164,52 @@ export class PointManager {
 	}
 
 	/**
-	 * Broadcasts current player's score to other participants (ScoreBroadcaster compatibility)
+	 * Gets all unique point sources for the current player
+	 * @returns Array of unique source names
+	 */
+	getAllPointSources(): string[] {
+		const currentPlayerId = this.getCurrentPlayerId();
+		const sources = new Set<string>();
+		this.transactions
+			.filter(t => t.playerId === currentPlayerId)
+			.forEach(t => sources.add(t.source));
+		return Array.from(sources);
+	}
+
+	/**
+	 * Gets transaction summary by source for the current player
+	 * @returns Map of source to total points
+	 */
+	getPointSummaryBySource(): Map<string, number> {
+		const summary = new Map<string, number>();
+		const sources = this.getAllPointSources();
+
+		sources.forEach(source => {
+			const total = this.getTotalPointsFromSource(source);
+			if (total > 0) {
+				summary.set(source, total);
+			}
+		});
+
+		return summary;
+	}
+
+	/**
+	 * Broadcasts current player's score to other participants
 	 */
 	broadcastScore(score?: number): void {
-		if (!this.scene) return;
-
 		const finalScore = score ?? this.getCurrentPoints();
-		const gameVars = this.scene.game.vars as GameVars;
 
-		if (gameVars.mode === "multi" && this.scene.game.selfId) {
-			// Update in allPlayersScores for current player
-			gameVars.allPlayersScores[this.scene.game.selfId] = finalScore;
-
+		if (this.gameContext.gameMode.mode === "multi") {
 			const message = {
 				type: "scoreUpdate",
 				scoreData: {
-					playerId: this.scene.game.selfId,
+					playerId: this.getCurrentPlayerId(),
 					score: finalScore
 				} as ScoreBroadcastMessage
 			};
 
-			this.scene.game.raiseEvent(new g.MessageEvent(message));
-		}
-	}
-
-	/**
-	 * Gets all players' scores (ScoreBroadcaster compatibility)
-	 */
-	getAllPlayersScores(): { [playerId: string]: number } {
-		const gameVars = this.scene.game.vars as GameVars;
-		return { ...gameVars.allPlayersScores };
-	}
-
-	/**
-	 * Gets a specific player's score (ScoreBroadcaster compatibility)
-	 */
-	getPlayerScore(playerId: string): number | undefined {
-		const gameVars = this.scene.game.vars as GameVars;
-		return gameVars.allPlayersScores[playerId];
-	}
-
-
-	/**
-	 * Initializes current player's score in the scores collection (ScoreBroadcaster compatibility)
-	 */
-	private initializeCurrentPlayerScore(): void {
-		if (!this.scene?.game.selfId) return;
-
-		const gameVars = this.scene.game.vars as GameVars;
-		if (gameVars.mode === "multi") {
-			const initialScore = this.gameContext.currentPlayer.points;
-			gameVars.allPlayersScores[this.scene.game.selfId] = initialScore;
+			this.game.raiseEvent(new g.MessageEvent(message));
 		}
 	}
 
@@ -206,20 +227,21 @@ export class PointManager {
 		const currentPlayerId = this.getCurrentPlayerId();
 
 		// Create transaction record
+		const nextTimestamp = ++this.transactionCounter;
 		const transaction: PointTransaction = {
 			id: this.generateTransactionId(),
 			playerId: currentPlayerId,
 			amount: amount,
 			source: source,
 			description: description,
-			timestamp: this.scene?.game.age || 0,
+			timestamp: nextTimestamp, // Use incremental counter instead of game.age
 			type: type
 		};
 
 		this.transactions.push(transaction);
 
 		// Update player data
-		const updatedPlayer = updatePlayerPoints(currentPlayer, amount, this.scene?.game.age || 0);
+		const updatedPlayer = updatePlayerPoints(currentPlayer, amount, nextTimestamp);
 		this.gameContext.updateCurrentPlayer(updatedPlayer);
 
 		// Broadcast score update for multi-player
@@ -238,7 +260,7 @@ export class PointManager {
 	 * Gets the current player ID for transactions
 	 */
 	private getCurrentPlayerId(): string {
-		return this.scene?.game.selfId || "current";
+		return this.gameContext.currentPlayer.id;
 	}
 
 	/**

@@ -1,3 +1,5 @@
+import { GameContext } from "../data/gameContext";
+import { TASK_METADATA } from "../data/taskConstants";
 import { TaskData } from "../data/taskData";
 import { ModalE } from "../entity/modalE";
 
@@ -9,7 +11,8 @@ export interface TaskExecutionContext {
 	scene: g.Scene;
 	screenWidth: number;
 	screenHeight: number;
-	onScoreAdd: (points: number) => void;
+	gameContext: GameContext;
+	onScoreAdd: (points: number, taskData: TaskData) => void;
 	onProfileSwitch: () => void;
 	onTimelineReveal: () => void;
 	onShopAppReveal: () => void;
@@ -35,30 +38,18 @@ export interface TaskExecutionResult {
 export class TaskManager {
 	private context: TaskExecutionContext;
 
-	// Task definitions - centralized task data
+	// Task definitions - centralized task data using constants
 	private readonly tasks: TaskData[] = [
 		{
-			id: "profile",
-			icon: "👤",
-			title: "プロフィールを設定する",
-			reward: "50pt",
-			rewardPoints: 50,
+			...TASK_METADATA.profile,
 			completed: false
 		},
 		{
-			id: "shopping",
-			icon: "🛒",
-			title: "通販サービスと連携する",
-			reward: "100pt",
-			rewardPoints: 100,
+			...TASK_METADATA.shopping,
 			completed: false
 		},
 		{
-			id: "sns",
-			icon: "📱",
-			title: "SNSと連携する",
-			reward: "100pt",
-			rewardPoints: 100,
+			...TASK_METADATA.sns,
 			completed: false
 		},
 	];
@@ -116,6 +107,10 @@ export class TaskManager {
 				return this.executeSnsTask(taskData);
 			case "shopping":
 				return this.executeShoppingTask(taskData);
+			case "novel_collection":
+				return this.executeCollectionTask(taskData, "novel");
+			case "manga_collection":
+				return this.executeCollectionTask(taskData, "manga");
 			default:
 				return {
 					success: false,
@@ -136,12 +131,15 @@ export class TaskManager {
 		// Mark task as completed in internal state
 		task.completed = true;
 
+		// Track achievement in GameContext
+		this.context.gameContext.addAchievedTask(taskId);
+
 		// Notify external system to remove task from UI
 		this.context.onTaskComplete(taskId);
 
 		// Add score reward (unless explicitly skipped)
 		if (!skipScoreReward) {
-			this.context.onScoreAdd(task.rewardPoints);
+			this.context.onScoreAdd(task.rewardPoints, task);
 		}
 
 		// Show achievement notification
@@ -158,7 +156,7 @@ export class TaskManager {
 			this.completeTask("profile", true); // Skip score reward for now
 
 			// Add score reward after completion
-			this.context.onScoreAdd(profileTask.rewardPoints);
+			this.context.onScoreAdd(profileTask.rewardPoints, profileTask);
 		}
 	}
 
@@ -199,6 +197,28 @@ export class TaskManager {
 	}
 
 	/**
+	 * Executes collection task (opens shop app for collection completion)
+	 */
+	private executeCollectionTask(taskData: TaskData, category: string): TaskExecutionResult {
+		// Open shop app to allow collection completion
+		this.context.onShopAppReveal();
+
+		// Track achievement in GameContext
+		this.context.gameContext.addAchievedTask(taskData.id);
+
+		// Award points immediately and complete task
+		this.context.onScoreAdd(taskData.rewardPoints, taskData);
+		this.context.onTaskComplete(taskData.id);
+		this.context.onAchievementShow(taskData, "collection");
+
+		return {
+			success: true,
+			message: `${category} collection task completed`,
+			unlockedFeatures: ["collection_bonus"]
+		};
+	}
+
+	/**
 	 * Shows modal explaining timeline feature unlock
 	 */
 	private showTimelineUnlockModal(taskData: TaskData): void {
@@ -209,6 +229,7 @@ export class TaskManager {
 
 		const modal = new ModalE({
 			scene: this.context.scene,
+			multi: this.context.gameContext.gameMode.mode === "multi",
 			name: "timelineUnlockModal",
 			args: taskData.id,
 			title: "タイムライン機能解放！",
@@ -236,6 +257,7 @@ export class TaskManager {
 
 		const modal = new ModalE({
 			scene: this.context.scene,
+			multi: this.context.gameContext.gameMode.mode === "multi",
 			name: "shoppingUnlockModal",
 			args: taskData.id,
 			title: "通販アプリ解放！",

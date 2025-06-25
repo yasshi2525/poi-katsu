@@ -18,18 +18,15 @@ describe("AFFILIATE_CONFIG", () => {
 		it("should have valid pricing configuration", () => {
 			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.3);
 			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.8);
-			expect(AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBe(120);
 
 			// Verify types
 			expect(typeof AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe("number");
 			expect(typeof AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe("number");
-			expect(typeof AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBe("number");
 
 			// Verify ranges
 			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBeGreaterThan(0);
 			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBeLessThan(1);
 			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBeGreaterThan(0);
-			expect(AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBeGreaterThan(0);
 		});
 
 		it("should have timeline configuration", () => {
@@ -71,9 +68,6 @@ describe("AFFILIATE_CONFIG", () => {
 
 			// Volatility should be reasonable for dramatic price changes
 			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBeLessThanOrEqual(1);
-
-			// Game time should match expected session duration
-			expect(AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME).toBe(120); // 2 minutes
 		});
 
 		it("should produce valid reward calculations", () => {

@@ -111,11 +111,6 @@
 			"path": "script/entity/radioButtonGroupE.js",
 			"global": true
 		},
-		"scoreBroadcaster": {
-			"type": "script",
-			"path": "script/model/scoreBroadcaster.js",
-			"global": true
-		},
 		"adBannerE": {
 			"type": "script",
 			"path": "script/entity/adBannerE.js",
@@ -191,11 +186,6 @@
 			"path": "script/data/gameContext.js",
 			"global": true
 		},
-		"gamePhaseManager": {
-			"type": "script",
-			"path": "script/manager/gamePhaseManager.js",
-			"global": true
-		},
 		"pointManager": {
 			"type": "script",
 			"path": "script/manager/pointManager.js",
@@ -259,6 +249,11 @@
 		"rankingScene": {
 			"type": "script",
 			"path": "script/scene/rankingScene.js",
+			"global": true
+		},
+		"taskConstants": {
+			"type": "script",
+			"path": "script/data/taskConstants.js",
 			"global": true
 		}
 	},

@@ -1,6 +1,7 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
 import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
+import { PointManager } from "../manager/pointManager";
 import { LabelButtonE } from "./labelButtonE";
 import { PlayerDetailE } from "./playerDetailE";
 
@@ -48,13 +49,17 @@ const RANKING_CONFIG = {
 export class PlayerRankingE extends g.E {
 	static assetIds: string[] = [];
 	private gameContext: GameContext;
+	private pointManager: PointManager;
 	private rankedPlayers: PlayerData[];
 	private currentDetailModal: PlayerDetailE | null = null;
 	private detailButtons: Map<string, LabelButtonE<string>> = new Map();
+	private rankingItems: g.E[] = [];
+	private animationsStarted: boolean = false;
 
 	constructor(param: {
 		scene: g.Scene;
 		gameContext: GameContext;
+		pointManager: PointManager;
 	}) {
 		super({
 			scene: param.scene,
@@ -64,7 +69,12 @@ export class PlayerRankingE extends g.E {
 		});
 
 		this.gameContext = param.gameContext;
+		this.pointManager = param.pointManager;
 		this.rankedPlayers = [];
+
+		// Start hidden to prevent flash
+		this.opacity = 0;
+		this.touchable = false;
 
 		this.setupBackground();
 		this.setupHeader();
@@ -77,6 +87,13 @@ export class PlayerRankingE extends g.E {
 	override show(): void {
 		this.opacity = 1;
 		this.touchable = true;
+
+		// Start entrance animations only once
+		if (!this.animationsStarted) {
+			this.startRankingAnimations();
+			this.animationsStarted = true;
+		}
+
 		super.show();
 	}
 
@@ -115,6 +132,15 @@ export class PlayerRankingE extends g.E {
 
 		// Create ranking items
 		this.createRankingItems();
+	}
+
+	/**
+	 * Starts the entrance animations for all ranking items
+	 */
+	private startRankingAnimations(): void {
+		for (let i = 0; i < this.rankingItems.length; i++) {
+			this.animateRankItemEntrance(this.rankingItems[i], i);
+		}
 	}
 
 	/**
@@ -198,6 +224,7 @@ export class PlayerRankingE extends g.E {
 			const yPosition = RANKING_CONFIG.CONTENT_Y_OFFSET + (i * (RANKING_CONFIG.RANK_ITEM_HEIGHT + RANKING_CONFIG.RANK_ITEM_SPACING));
 
 			const rankItem = this.createRankingItem(player, rank, yPosition, i);
+			this.rankingItems.push(rankItem);
 			this.append(rankItem);
 		}
 	}
@@ -264,7 +291,7 @@ export class PlayerRankingE extends g.E {
 		// Player name
 		const nameLabel = new g.Label({
 			scene: this.scene,
-			text: player.profile.name,
+			text: player.profile.name + `(${player.id})`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
@@ -294,6 +321,7 @@ export class PlayerRankingE extends g.E {
 		// Detail button
 		const detailButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			text: "詳細",
 			fontSize: 14,
 			fontFamily: "sans-serif",
@@ -312,8 +340,9 @@ export class PlayerRankingE extends g.E {
 		// Store button for reactivation after modal close
 		this.detailButtons.set(player.id, detailButton);
 
-		// Animate entrance
-		this.animateRankItemEntrance(container, index);
+		// Set initial state - hidden
+		container.opacity = 0;
+		container.x += 50;
 
 		return container;
 	}
@@ -338,9 +367,6 @@ export class PlayerRankingE extends g.E {
 	 * Animates rank item entrance
 	 */
 	private animateRankItemEntrance(rankItem: g.E, index: number): void {
-		rankItem.opacity = 0;
-		rankItem.x += 50;
-
 		const timeline = new Timeline(this.scene);
 		timeline.create(rankItem)
 			.wait(RANKING_CONFIG.INITIAL_DELAY + (index * RANKING_CONFIG.STAGGER_DELAY))
@@ -367,6 +393,8 @@ export class PlayerRankingE extends g.E {
 		this.currentDetailModal = new PlayerDetailE({
 			scene: this.scene,
 			player: player,
+			gameContext: this.gameContext,
+			pointManager: this.pointManager,
 			rank: rank,
 			onClose: () => this.closePlayerDetail()
 		});

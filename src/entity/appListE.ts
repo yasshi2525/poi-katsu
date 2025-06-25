@@ -79,8 +79,8 @@ export class AppListE extends g.E {
 		this.apps = [
 			{ icon: "👤", name: "プロフィール", color: "#3498db", visible: true },
 			{ icon: "🛒", name: "通販", color: "#2980b9", visible: false }, // Initially hidden
-			{ icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1", visible: true },
-			{ icon: "🛍️", name: "フリマ", color: "#7f8c8d", visible: true },
+			// { icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1", visible: true }, // Not implemented yet
+			// { icon: "🛍️", name: "フリマ", color: "#7f8c8d", visible: true }, // Not implemented yet
 			{ icon: "💰", name: "精算", color: "#8e44ad", visible: false }, // Initially hidden
 		];
 
@@ -100,12 +100,13 @@ export class AppListE extends g.E {
 			this.shopAppVisible = true;
 		}
 
-		// Create the shop app icon (index 1 for shop)
+		// Create the shop app icon (calculate actual index dynamically)
 		const iconLayout = this.layout.children!.icon;
-		const appX = this.layout.x + iconLayout.x + (1 * 180); // Shop is at index 1
+		const shopIndex = this.apps.findIndex(app => app.name === "通販");
+		const appX = this.layout.x + iconLayout.x + (shopIndex * 180);
 		const appY = this.layout.y + iconLayout.y;
 
-		this.createAppIcon(shopApp!, appX, appY, 1, false); // false = not automatic
+		this.createAppIcon(shopApp!, appX, appY, shopIndex, false); // false = not automatic
 
 		// Start with opacity 0 for fade-in effect
 		this.shopAppElements.forEach(element => {
@@ -169,9 +170,6 @@ export class AppListE extends g.E {
 		// Track if this is automatic settlement
 		this.settlementIsAutomatic = isAutomatic;
 
-		// Hide all other apps when settlement is revealed
-		this.hideAllAppsExceptSettlement();
-
 		// Update app visibility state
 		const settlementApp = this.apps.find(app => app.name === "精算");
 		if (settlementApp) {
@@ -179,12 +177,13 @@ export class AppListE extends g.E {
 			this.settlementAppVisible = true;
 		}
 
-		// Create the settlement app icon (index 4 for settlement)
+		// Create the settlement app icon (calculate actual index dynamically)
 		const iconLayout = this.layout.children!.icon;
-		const appX = this.layout.x + iconLayout.x + (4 * 180); // Settlement is at index 4
+		const settlementIndex = this.apps.findIndex(app => app.name === "精算");
+		const appX = this.layout.x + iconLayout.x + (settlementIndex * 180);
 		const appY = this.layout.y + iconLayout.y;
 
-		this.createAppIcon(settlementApp!, appX, appY, 4, isAutomatic);
+		this.createAppIcon(settlementApp!, appX, appY, settlementIndex, isAutomatic);
 
 		// Start with opacity 0 for fade-in effect
 		this.settlementAppElements.forEach(element => {
@@ -234,22 +233,6 @@ export class AppListE extends g.E {
 					}
 				});
 		}
-	}
-
-	/**
-	 * Hides all app entities except the settlement app
-	 */
-	private hideAllAppsExceptSettlement(): void {
-		// Update app visibility state for non-settlement apps
-		this.apps.forEach(app => {
-			if (app.name !== "精算") {
-				app.visible = false;
-			}
-		});
-
-		// Note: Since app visibility only affects initial creation,
-		// this will prevent other apps from being shown during settlement.
-		// The visual hiding happens through the fact that settlement takes over the full screen.
 	}
 
 	/**

@@ -13,6 +13,8 @@ export interface RadioButtonOption {
  * Parameter object for RadioButtonGroup
  */
 export interface RadioButtonGroupParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Options for radio buttons */
 	options: RadioButtonOption[];
 	/** Initially selected option ID */
@@ -33,6 +35,7 @@ export interface RadioButtonGroupParameterObject extends g.EParameterObject {
 export class RadioButtonGroupE extends g.E {
 	static assetIds: string[] = [];
 
+	private readonly multi: boolean;
 	private readonly options: RadioButtonOption[];
 	private readonly buttonWidth: number;
 	private readonly buttonHeight: number;
@@ -48,6 +51,7 @@ export class RadioButtonGroupE extends g.E {
 	constructor(options: RadioButtonGroupParameterObject) {
 		super(options);
 
+		this.multi = options.multi;
 		this.options = options.options;
 		this.selectedId = options.selectedId;
 		this.buttonWidth = options.buttonWidth;
@@ -108,6 +112,7 @@ export class RadioButtonGroupE extends g.E {
 
 			const button = new LabelButtonE<string>({
 				scene: this.scene,
+				multi: this.multi,
 				name: `radioButton_${option.id}`,
 				args: option.id,
 				width: this.buttonWidth,

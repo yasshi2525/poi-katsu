@@ -1,4 +1,5 @@
 import { resolvePlayerInfo } from "@akashic-extension/resolve-player-info";
+import { GameContext } from "../data/gameContext";
 import { LabelButtonE } from "./labelButtonE";
 import { RadioButtonGroupE, RadioButtonOption } from "./radioButtonGroupE";
 
@@ -11,19 +12,10 @@ export interface ProfileData {
 }
 
 /**
- * Profile broadcast message data
- * Used to synchronize profile information across all participants in multi mode
- */
-interface ProfileBroadcastMessage {
-	playerId: string;
-	name: string;
-	avatar: string;
-}
-
-/**
  * Parameter object for ProfileEditor
  */
 export interface ProfileEditorParameterObject extends g.EParameterObject {
+	gameContext: GameContext;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -40,6 +32,7 @@ export interface ProfileEditorParameterObject extends g.EParameterObject {
 export class ProfileEditorE extends g.E {
 	static assetIds: string[] = [];
 
+	private readonly gameContext: GameContext;
 	private readonly screenWidth: number;
 	private readonly screenHeight: number;
 	private readonly onComplete: () => void;
@@ -55,12 +48,12 @@ export class ProfileEditorE extends g.E {
 	constructor(options: ProfileEditorParameterObject) {
 		super(options);
 
+		this.gameContext = options.gameContext;
 		this.screenWidth = options.width;
 		this.screenHeight = options.height;
 		this.onComplete = options.onComplete;
 		this.onProfileChange = options.onProfileChange;
 
-		this.setupPlayerInfoHandler();
 		this.createLayout();
 
 		// Initialize name button text with current name if available
@@ -71,49 +64,11 @@ export class ProfileEditorE extends g.E {
 	}
 
 	/**
-	 * Sets up the player info event handler for multi mode
-	 */
-	private setupPlayerInfoHandler(): void {
-		const gameVars = this.scene.game.vars as GameVars;
-		if (gameVars.mode === "multi") {
-			this.scene.game.onPlayerInfo.add((ev: g.PlayerInfoEvent) => {
-				// Store all participants' profiles
-				const playerId = ev.player.id;
-				const playerName = ev.player.name || "プレイヤー";
-
-				// Only process if playerId is defined
-				if (playerId) {
-					// Store in allPlayersProfiles for all participants
-					gameVars.allPlayersProfiles[playerId] = {
-						name: playerName,
-						avatar: gameVars.allPlayersProfiles[playerId]?.avatar || "😀"
-					};
-
-					// Update current player's profile if this event is for the current player
-					if (this.scene && playerId === this.scene.game.selfId) {
-						gameVars.playerProfile.name = playerName;
-						// Update the name button text to show the new name
-						this.updateNameButtonText(playerName);
-						// Broadcast the updated profile to other participants
-						this.broadcastProfile();
-						// Notify parent component of profile change
-						if (this.onProfileChange) {
-							this.onProfileChange();
-						}
-					}
-				}
-			});
-		}
-	}
-
-
-	/**
 	 * Initializes the name button text with current player name if available
 	 */
 	private initializeNameButtonText(): void {
-		const gameVars = this.scene.game.vars as GameVars;
-		if (gameVars.playerProfile.name && gameVars.playerProfile.name !== "プレイヤー") {
-			this.updateNameButtonText(gameVars.playerProfile.name);
+		if (this.gameContext.currentPlayer.profile.name !== "プレイヤー") {
+			this.updateNameButtonText(this.gameContext.currentPlayer.profile.name);
 		}
 	}
 
@@ -133,15 +88,13 @@ export class ProfileEditorE extends g.E {
 	private broadcastProfile(): void {
 		if (!this.scene) return;
 
-		const gameVars = this.scene.game.vars as GameVars;
-		if (gameVars.mode === "multi" && this.scene.game.selfId) {
+		if (this.gameContext.gameMode.mode === "multi") {
 			const message = {
 				type: "profileUpdate",
 				profileData: {
-					playerId: this.scene.game.selfId,
-					name: gameVars.playerProfile.name,
-					avatar: gameVars.playerProfile.avatar
-				} as ProfileBroadcastMessage
+					playerId: this.gameContext.currentPlayer.id,
+					...this.gameContext.currentPlayer.profile
+				}
 			};
 
 			this.scene.game.raiseEvent(new g.MessageEvent(message));
@@ -219,13 +172,21 @@ export class ProfileEditorE extends g.E {
 			local: true,
 		});
 		nameButtonBg.onPointDown.add(() => {
-			const gameVars = this.scene.game.vars as GameVars;
-			if (gameVars.mode === "ranking") {
-				// In ranking mode, resolvePlayerInfo is not available, so use default name
-				gameVars.playerProfile.name = "プレイヤー";
-			} else if (gameVars.mode === "multi") {
+			if (this.gameContext.gameMode.mode === "multi") {
 				// In multi mode, resolvePlayerInfo will trigger onPlayerInfo event
-				resolvePlayerInfo({ raises: true });
+				resolvePlayerInfo({}, (_, playerInfo) => {
+					if (playerInfo?.name) {
+						this.gameContext.currentPlayer.profile.name = playerInfo.name;
+						// Update the name button text to show the new name
+						this.updateNameButtonText(playerInfo.name);
+						// Broadcast the updated profile to other participants
+						this.broadcastProfile();
+						// Notify parent component of profile change
+						if (this.onProfileChange) {
+							this.onProfileChange();
+						}
+					}
+				});
 			}
 		});
 		this.append(nameButtonBg);
@@ -277,6 +238,7 @@ export class ProfileEditorE extends g.E {
 		// Create avatar radio button group
 		this.avatarSelection = new RadioButtonGroupE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			x: 50,
 			y: 250,
 			options: avatarOptions,
@@ -287,16 +249,10 @@ export class ProfileEditorE extends g.E {
 			onSelectionChange: (selectedId: string, selectedValue: string) => {
 				this.selectedAvatarId = selectedId;
 				// Update gameVars directly when avatar is selected
-				const gameVars = this.scene.game.vars as GameVars;
-				gameVars.playerProfile.avatar = selectedValue;
+				this.gameContext.currentPlayer.profile.avatar = selectedValue;
 
-				// Also update in allPlayersProfiles if in multi mode
-				if (gameVars.mode === "multi") {
-					const currentPlayerId = this.scene.game.selfId;
-					if (currentPlayerId && gameVars.allPlayersProfiles[currentPlayerId]) {
-						gameVars.allPlayersProfiles[currentPlayerId].avatar = selectedValue;
-					}
-					// Broadcast the updated profile to other participants
+				// Broadcast the updated profile to other participants
+				if (this.gameContext.gameMode.mode === "multi") {
 					this.broadcastProfile();
 				}
 
@@ -315,6 +271,7 @@ export class ProfileEditorE extends g.E {
 	private createSubmitButton(): void {
 		const submitButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			name: "submitProfileButton",
 			args: "submit",
 			width: 120,

@@ -47,6 +47,7 @@ describe("ButtonE", () => {
 		it("should create button with default options", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -67,6 +68,7 @@ describe("ButtonE", () => {
 		it("should create button with custom position", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -84,6 +86,7 @@ describe("ButtonE", () => {
 		it("should store onClick handler when provided", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -99,6 +102,7 @@ describe("ButtonE", () => {
 		it("should call createVisualElements during construction", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -114,6 +118,7 @@ describe("ButtonE", () => {
 		beforeEach(() => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -236,6 +241,7 @@ describe("ButtonE", () => {
 			// properly implements the abstract method
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -250,6 +256,7 @@ describe("ButtonE", () => {
 		it("should require implementation of onPressedStateChange", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -276,6 +283,7 @@ describe("ButtonE", () => {
 		it("should accept all required ButtonOptions properties", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 200,
@@ -297,6 +305,7 @@ describe("ButtonE", () => {
 		it("should work with minimal required options", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -317,6 +326,7 @@ describe("ButtonE", () => {
 		it("should extend g.E correctly", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -332,6 +342,7 @@ describe("ButtonE", () => {
 		it("should maintain proper event chain", () => {
 			const options: ButtonEParameterObject<number> = {
 				scene: scene,
+				multi: false,
 				name: "testButton",
 				args: 0,
 				width: 100,
@@ -401,6 +412,7 @@ describe("ButtonE", () => {
 
 			const options: ButtonEParameterObject<number> = {
 				scene: passiveScene,
+				multi: true,
 				name: "testButton",
 				args: 42,
 				width: 100,

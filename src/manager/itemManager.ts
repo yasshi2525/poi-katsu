@@ -74,6 +74,17 @@ export class ItemManager {
 	}
 
 	/**
+	 * Checks if a specific category collection is complete
+	 * @param category The category to check (novel or manga)
+	 * @returns true if all items in the category are owned
+	 */
+	isCollectionComplete(category: string): boolean {
+		const categoryItems = this.availableItems.filter(item => item.category === category);
+		const ownedCategoryItems = categoryItems.filter(item => this.ownsItem(item.id));
+		return ownedCategoryItems.length === categoryItems.length && categoryItems.length > 0;
+	}
+
+	/**
 	 * Gets set completion information for settlement calculations
 	 * @returns Array of set information for each category
 	 */

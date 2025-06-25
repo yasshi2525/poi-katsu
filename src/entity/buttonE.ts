@@ -14,6 +14,7 @@ export interface ButtonEMessageArgs<T> {
  * @template T Type of the button's arguments
  */
 export interface ButtonEParameterObject<T> extends g.EParameterObject {
+	multi: boolean; // Whether this button is for multiplayer mode
 	/** Unique name identifier for the button */
 	name: string;
 	/** Arguments associated with this button */
@@ -34,6 +35,7 @@ export interface ButtonEParameterObject<T> extends g.EParameterObject {
  */
 export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.E {
 	msgArgs: T;
+	readonly multi: boolean;
 	readonly name: string;
 	readonly onPress: g.Trigger<boolean> = new g.Trigger();
 	readonly onSync: g.Trigger<"sending" | "received"> = new g.Trigger();
@@ -53,6 +55,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 			local: true,
 			touchable: true,
 		});
+		this.multi = options.multi;
 		this.name = options.name;
 		this.msgArgs = options.args;
 		this.sync = "idle";
@@ -128,7 +131,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 		this.onSyncStateChange(this.sync);
 
 		// Create loading overlay for multi-mode to prevent multiple interactions
-		if ((this.scene.game.vars as GameVars).mode === "multi") {
+		if (this.multi) {
 			this.createLoadingOverlay();
 
 			const message: MessageData<ButtonEMessageArgs<T>> = {
@@ -176,7 +179,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 			this.send();
 		});
 
-		if ((this.scene.game.vars as GameVars).mode === "multi") {
+		if (this.multi) {
 			this.onMessage.add(e => {
 				if (e.player?.id === this.scene.game.selfId && e.data.name === "submit" && e.data.args?.name === this.name) {
 					this.onReceive(e.data.args?.args);

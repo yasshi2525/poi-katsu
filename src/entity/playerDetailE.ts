@@ -1,5 +1,7 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
+import { PointManager } from "../manager/pointManager";
 import { LabelButtonE } from "./labelButtonE";
 import { ScoreBreakdownE } from "./scoreBreakdownE";
 
@@ -45,13 +47,18 @@ const DETAIL_CONFIG = {
  */
 export class PlayerDetailE extends g.E {
 	private player: PlayerData;
+	private gameContext: GameContext;
+	private pointManager: PointManager;
 	private rank: number;
 	private onCloseCallback: () => void;
 	private scoreBreakdown: ScoreBreakdownE | null = null;
+	private breakdownButton: LabelButtonE<string> | null = null;
 
 	constructor(param: {
 		scene: g.Scene;
 		player: PlayerData;
+		gameContext: GameContext;
+		pointManager: PointManager;
 		rank: number;
 		onClose: () => void;
 	}) {
@@ -63,6 +70,8 @@ export class PlayerDetailE extends g.E {
 		});
 
 		this.player = param.player;
+		this.gameContext = param.gameContext;
+		this.pointManager = param.pointManager;
 		this.rank = param.rank;
 		this.onCloseCallback = param.onClose;
 
@@ -376,8 +385,9 @@ export class PlayerDetailE extends g.E {
 		modal.append(bonusScoreLabel);
 
 		// Score breakdown button
-		const breakdownButton = new LabelButtonE({
+		this.breakdownButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			text: "内訳表示",
 			fontSize: 14,
 			fontFamily: "sans-serif",
@@ -391,7 +401,7 @@ export class PlayerDetailE extends g.E {
 			args: "show_breakdown",
 			onComplete: () => this.showScoreBreakdown()
 		});
-		modal.append(breakdownButton);
+		modal.append(this.breakdownButton);
 
 		return startY + DETAIL_CONFIG.SCORE_SECTION_HEIGHT + DETAIL_CONFIG.SECTION_SPACING;
 	}
@@ -403,6 +413,7 @@ export class PlayerDetailE extends g.E {
 		// Close button
 		const closeButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			text: "閉じる",
 			fontSize: 16,
 			fontFamily: "sans-serif",
@@ -430,6 +441,8 @@ export class PlayerDetailE extends g.E {
 		this.scoreBreakdown = new ScoreBreakdownE({
 			scene: this.scene,
 			player: this.player,
+			gameContext: this.gameContext,
+			pointManager: this.pointManager,
 			onClose: () => this.closeScoreBreakdown()
 		});
 
@@ -443,6 +456,11 @@ export class PlayerDetailE extends g.E {
 		if (this.scoreBreakdown) {
 			this.scoreBreakdown.destroy();
 			this.scoreBreakdown = null;
+		}
+
+		// Reactivate breakdown button for multiple interactions
+		if (this.breakdownButton) {
+			this.breakdownButton.reactivate();
 		}
 	}
 

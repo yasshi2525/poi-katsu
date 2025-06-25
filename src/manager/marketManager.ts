@@ -1,4 +1,5 @@
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
+import { GameContext } from "../data/gameContext";
 import { ItemData, getDefaultCatalogItems } from "../data/itemData";
 
 /**
@@ -37,22 +38,24 @@ export class MarketManager {
 	private isActive: boolean;
 	private marketPrices: Map<string, MarketPriceData> = new Map();
 	private priceUpdateInterval?: g.TimerIdentifier;
-	private mode: "multi" | "ranking";
+	private context: GameContext;
+	private priceUpdateListeners: Array<() => void> = [];
+	private timestampCounter: number = 0;
 
 	/**
 	 * Creates a new MarketManager instance
 	 */
-	constructor(scene: g.Scene, mode: "multi" | "ranking") {
+	constructor(scene: g.Scene, context: GameContext) {
 		this.scene = scene;
-		this.mode = mode;
-		this.isActive = mode === "ranking" || scene.game.isActiveInstance();
+		this.context = context;
+		this.isActive = context.gameMode.mode === "ranking" || scene.game.isActiveInstance();
 	}
 
 	/**
 	 * Initializes the market manager
 	 */
 	initialize(): void {
-		if (this.mode === "multi" && this.isActive) {
+		if (this.getMode() === "multi" && this.isActive) {
 			// Active instance in multi mode: setup listeners first, then start broadcasting
 			this.setupPriceBroadcastListener(); // Setup our own listener for consistency
 
@@ -61,32 +64,40 @@ export class MarketManager {
 				this.updateAllPrices(); // Initial price calculation
 				this.startPriceUpdates(); // Periodic updates
 			}, 100); // 100ms delay to prevent race condition
-		} else if (this.mode === "multi") {
+		} else if (this.getMode() === "multi") {
 			// Non-active instance in multi mode: listen for price broadcasts
 			this.setupPriceBroadcastListener();
+		} else {
+			// In ranking mode: calculate and cache prices locally every 3 seconds
+			this.scene.setTimeout(() => {
+				this.updateAllPricesLocally(); // Initial price calculation
+				this.startPriceUpdates(); // Periodic updates (same interval as multi mode)
+			}, 100);
 		}
-		// In ranking mode, prices are calculated on-demand
 	}
 
 	/**
 	 * Gets the current dynamic price for an item from cache
 	 */
-	getDynamicPrice(item: ItemData, remainingTime: number): number {
+	getDynamicPrice(item: ItemData, _remainingTime: number): number {
+		// Both ranking and multi modes use cached prices only - no dynamic calculation
 		const marketPrice = this.marketPrices.get(item.id);
-
-		if (this.mode === "ranking") {
-			// In ranking mode, calculate directly since no broadcasting
-			return this.calculateDynamicPrice(item, remainingTime);
-		}
-
-		// In multi mode, always use cached price from broadcasts
 		if (marketPrice) {
 			return marketPrice.dynamicPrice;
 		}
 
-		// If no cached price yet, return 0 to indicate unavailable
-		// This will trigger fallback to base price in UI
-		return 0;
+		// If no cached price available (initial state), return base price
+		// In multi mode: wait for active instance broadcast
+		// In ranking mode: use static base price throughout
+
+		// Validate base price and provide fallback for invalid values
+		const basePrice = item.purchasePrice;
+		if (basePrice <= 0) {
+			console.warn(`Invalid base price: ${basePrice}, using default value 100`);
+			return 100;
+		}
+
+		return basePrice;
 	}
 
 
@@ -101,7 +112,26 @@ export class MarketManager {
 	 * Gets the current mode
 	 */
 	getMode(): "multi" | "ranking" {
-		return this.mode;
+		return this.context.gameMode.mode;
+	}
+
+	/**
+	 * Registers a listener for price updates
+	 * @param listener Function to call when prices are updated
+	 */
+	addPriceUpdateListener(listener: () => void): void {
+		this.priceUpdateListeners.push(listener);
+	}
+
+	/**
+	 * Removes a price update listener
+	 * @param listener Function to remove from listeners
+	 */
+	removePriceUpdateListener(listener: () => void): void {
+		const index = this.priceUpdateListeners.indexOf(listener);
+		if (index >= 0) {
+			this.priceUpdateListeners.splice(index, 1);
+		}
 	}
 
 	/**
@@ -132,12 +162,11 @@ export class MarketManager {
 		}
 
 		// Calculate time factor (0 to 1, where 1 is start of game, 0 is end)
-		const maxTime = AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME;
+		const maxTime = this.getTotalTimeLimit();
 		const timeFactor = Math.max(0, Math.min(1, remainingTime / maxTime));
 
-		// Generate deterministic "random" value based on item and time
-		const seed = this.generateSeed(item.id, Math.floor(remainingTime / 3)); // Update every 3 seconds for maximum dynamic changes
-		const randomValue = this.seededRandom(seed);
+		// Generate random value
+		const randomValue = this.random();
 
 		// Calculate price variation with DRAMATICALLY enhanced time factor effect
 		const volatility = AFFILIATE_CONFIG.PRICING.VOLATILITY;
@@ -165,10 +194,10 @@ export class MarketManager {
 		}
 
 		// Cache the price in multi mode
-		if (this.mode === "multi") {
+		if (this.getMode() === "multi") {
 			this.marketPrices.set(item.id, {
 				dynamicPrice,
-				lastCalculated: this.scene.game.age,
+				lastCalculated: this.getNextTimestamp(),
 				lastRemainingTime: remainingTime
 			});
 		}
@@ -176,26 +205,8 @@ export class MarketManager {
 		return dynamicPrice;
 	}
 
-	/**
-	 * Generates a seed for deterministic random values
-	 */
-	private generateSeed(itemId: string, timeSlot: number): number {
-		let hash = 0;
-		const str = `${itemId}_${timeSlot}`;
-		for (let i = 0; i < str.length; i++) {
-			const char = str.charCodeAt(i);
-			hash = ((hash << 5) - hash) + char;
-			hash = hash & hash; // Convert to 32-bit integer
-		}
-		return Math.abs(hash);
-	}
-
-	/**
-	 * Generates a seeded random value between 0 and 1
-	 */
-	private seededRandom(seed: number): number {
-		const x = Math.sin(seed) * 10000;
-		return x - Math.floor(x);
+	private random(): number {
+		return this.context.localRandom.generate();
 	}
 
 	/**
@@ -204,7 +215,14 @@ export class MarketManager {
 	private startPriceUpdates(): void {
 		// Update prices every 3 seconds for maximum visible price changes
 		this.priceUpdateInterval = this.scene.setInterval(() => {
-			this.updateAllPrices();
+			if (this.getMode() === "multi" && this.isActive) {
+				// Multi mode: calculate and broadcast prices
+				this.updateAllPrices();
+			} else if (this.getMode() === "ranking") {
+				// Ranking mode: calculate and cache prices locally
+				this.updateAllPricesLocally();
+			}
+			// Non-active multi instances don't calculate, they only listen
 		}, 3000);
 	}
 
@@ -212,38 +230,43 @@ export class MarketManager {
 	 * Updates all item prices and broadcasts them
 	 */
 	private updateAllPrices(): void {
-		const gameVars = this.scene.game.vars as GameVars;
-		const totalTimeLimit = gameVars.totalTimeLimit || AFFILIATE_CONFIG.PRICING.TOTAL_GAME_TIME;
-		const currentTime = this.scene.game.age / 1000; // Convert to seconds
-		const remainingTime = Math.max(0, totalTimeLimit - currentTime);
-
 		// Get all available items from catalog
 		const allItems = getDefaultCatalogItems();
 
 		// Calculate and broadcast prices for all items
 		allItems.forEach((item: ItemData) => {
-			const dynamicPrice = this.calculateDynamicPrice(item, remainingTime);
+			const dynamicPrice = this.calculateDynamicPrice(item, this.getRemainingTime());
 
 			// Always broadcast in multi mode, even for our own calculation
-			if (this.mode === "multi") {
-				this.broadcastPriceUpdate(item.id, dynamicPrice, remainingTime);
+			if (this.getMode() === "multi") {
+				this.broadcastPriceUpdate(item.id, dynamicPrice, this.getRemainingTime());
 			}
 		});
 
-		// Broadcast UI update event for all listening components
-		this.broadcastUIUpdateEvent();
+		// Notify local listeners that prices have been updated (no network traffic)
+		this.notifyPriceUpdateListeners();
 	}
 
 	/**
-	 * Broadcasts UI update event to notify listening components
+	 * Updates all item prices locally for ranking mode (no broadcasting)
 	 */
-	private broadcastUIUpdateEvent(): void {
-		const uiUpdateMessage = {
-			type: "uiPriceUpdate",
-			timestamp: this.scene.game.age
-		};
+	private updateAllPricesLocally(): void {
+		// Get all available items from catalog
+		const allItems = getDefaultCatalogItems();
 
-		this.scene.game.raiseEvent(new g.MessageEvent(uiUpdateMessage));
+		// Calculate and cache prices for all items locally
+		allItems.forEach((item: ItemData) => {
+			const dynamicPrice = this.calculateDynamicPrice(item, this.getRemainingTime());
+			// Cache the price locally for ranking mode
+			this.marketPrices.set(item.id, {
+				dynamicPrice,
+				lastCalculated: this.getNextTimestamp(),
+				lastRemainingTime: this.getRemainingTime()
+			});
+		});
+
+		// Notify local listeners that prices have been updated
+		this.notifyPriceUpdateListeners();
 	}
 
 	/**
@@ -253,7 +276,7 @@ export class MarketManager {
 		const message: PriceUpdateMessage = {
 			itemId,
 			dynamicPrice,
-			calculatedAt: this.scene.game.age,
+			calculatedAt: this.getNextTimestamp(),
 			remainingTime
 		};
 
@@ -286,6 +309,36 @@ export class MarketManager {
 			lastCalculated: priceData.calculatedAt,
 			lastRemainingTime: priceData.remainingTime
 		});
+
+		// Notify local listeners that prices have been updated
+		this.notifyPriceUpdateListeners();
 	}
 
+	/**
+	 * Notifies all registered listeners that prices have been updated
+	 */
+	private notifyPriceUpdateListeners(): void {
+		this.priceUpdateListeners.forEach(listener => {
+			try {
+				listener();
+			} catch (error) {
+				console.error("Error in price update listener:", error);
+			}
+		});
+	}
+
+	private getRemainingTime(): number {
+		return this.context.gameState.remainingTime;
+	}
+
+	private getTotalTimeLimit(): number {
+		return this.context.gameState.totalTimeLimit;
+	}
+
+	/**
+	 * Gets the next incremental timestamp for consistent ordering
+	 */
+	private getNextTimestamp(): number {
+		return ++this.timestampCounter;
+	}
 }

@@ -1,12 +1,13 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AffiliateBroadcastMessage, AffiliatePurchaseMessage } from "../data/affiliateMessages";
 import { GameContext } from "../data/gameContext";
-import { createPlayerData } from "../data/playerData";
+import { createInitialPlayerProfile, createPlayerData, PlayerData } from "../data/playerData";
 import { SharedPostData } from "../data/sharedPostData";
 import { AgreementE } from "../entity/agreementE";
 import { HeaderE } from "../entity/headerE";
 import { HomeE } from "../entity/homeE";
 import { MarketManager } from "../manager/marketManager";
+import { PointManager } from "../manager/pointManager";
 import { BaseScene } from "./baseScene";
 import { RankingScene} from "./rankingScene";
 
@@ -15,16 +16,15 @@ const config = {
 };
 
 export class MainScene extends BaseScene {
-	private remainFrame: number;
-	private lastRemainSec: number;
 	private header?: HeaderE;
 	private home?: HomeE;
 	private marketManager?: MarketManager;
-	private gameContext?: GameContext;
+	private pointManager?: PointManager;
+	private gameContext: GameContext;
 	private interactionBlocker?: g.E;
 	private pendingSharedPosts: SharedPostData[] = []; // Store posts received before HomeE is created
 
-	constructor(param: g.SceneParameterObject) {
+	constructor(param: g.SceneParameterObject & { mode: "multi" | "ranking"; totalTimeLimit: number }) {
 		super({
 			...param,
 			assetIds: [
@@ -34,55 +34,51 @@ export class MainScene extends BaseScene {
 				...HomeE.assetIds
 			]
 		});
-		this.remainFrame = (this.game.vars as GameVars).totalTimeLimit * this.game.fps;
-		this.lastRemainSec = Math.floor(this.remainFrame / this.game.fps);
+
+		// Initialize GameContext
+		const initialPlayerData = createPlayerData(this.game.selfId, createInitialPlayerProfile(), 0);
+
+		const gameMode = {
+			mode: param.mode,
+			maxPlayers: 4,
+			currentPlayers: 1
+		};
+
+		this.gameContext = new GameContext(
+			initialPlayerData,
+			gameMode,
+			this.game.vars.gameState,
+			this.game.localRandom,
+			param.totalTimeLimit,
+			this.game.fps
+		);
+
 		this.onLoad.add(() => {
 			// Initialize MarketManager for price management
-			const gameVars = this.game.vars as GameVars;
-			const mode = gameVars.mode || "ranking";
-			this.marketManager = new MarketManager(this, mode);
+			this.marketManager = new MarketManager(this, this.gameContext);
 			this.marketManager.initialize();
 
-			// Initialize GameContext for settlement and ranking features
-			const initialPlayerData = createPlayerData({
-				name: gameVars.playerProfile.name,
-				avatar: gameVars.playerProfile.avatar
-			}, this.game.age);
-
-			// Override initial points with current score
-			initialPlayerData.points = gameVars.gameState.score;
-
-			const gameMode = {
-				mode: (gameVars.mode === "multi" ? "multi_admission" : "ranking") as "ranking" | "multi_admission",
-				maxPlayers: 4,
-				currentPlayers: 1
-			};
-
-			this.gameContext = new GameContext(initialPlayerData, gameMode, gameVars.totalTimeLimit, this.game.age);
-
+			// Initialize PointManager for centralized point management
+			this.pointManager = new PointManager(this.gameContext, this.game);
 
 			// Initialize multi-player broadcast handlers immediately to prevent race conditions
 			this.initializeMessageHandlers();
-
-			this.onUpdate.add(() => {
-				if (this.remainFrame > 0) {
-					this.remainFrame--;
-					const currentRemainSec = Math.floor(this.remainFrame / this.game.fps);
-					// Only update header when seconds change
-					if (currentRemainSec !== this.lastRemainSec) {
-						this.lastRemainSec = currentRemainSec;
-						if (this.header) {
-							this.header.setTime(currentRemainSec);
-						}
-					}
-				} else if (this.remainFrame === 0) {
-					// Time reached zero - block all player interactions
-					this.blockAllInteractions();
-					// Trigger automatic settlement app reveal and execution
-					this.triggerAutomaticSettlement();
-					this.remainFrame = -1; // Prevent multiple executions
+			this.gameContext.on("timeUpdated", (remainingTime: number) => {
+				if (this.header) {
+					this.header.setTime(remainingTime);
 				}
 			});
+			this.gameContext.on("timeEnded", () => {
+				// Time reached zero - block all player interactions
+				this.blockAllInteractions();
+				// Trigger automatic settlement app reveal and execution
+				this.triggerAutomaticSettlement();
+			});
+
+			this.onUpdate.add(() =>
+				// Decrement remaining frames and if it reaches zero, remove this handler
+				!this.gameContext.decrementRemainingFrame()
+			);
 			this.append(new g.FilledRect({
 				scene: this,
 				cssColor: "#4A90E2",
@@ -117,18 +113,12 @@ export class MainScene extends BaseScene {
 	 * This prevents race conditions where fast players broadcast before slow players are ready
 	 */
 	public initializeMessageHandlers(): void {
-		const gameVars = this.game.vars as GameVars;
-		if (gameVars.mode === "multi") {
+		if (this.gameContext.gameMode.mode === "multi") {
 			this.onMessage.add((ev: g.MessageEvent) => {
 				// Handle profile broadcasts
 				if (ev.data?.type === "profileUpdate" && ev.data?.profileData) {
 					const profileData = ev.data.profileData;
-					if (profileData.playerId && profileData.playerId !== this.game.selfId) {
-						gameVars.allPlayersProfiles[profileData.playerId] = {
-							name: profileData.name,
-							avatar: profileData.avatar
-						};
-						// Also update profile in GameContext for ranking consistency
+					if (profileData.playerId && profileData.playerId !== this.gameContext.currentPlayer.id) {
 						this.updatePlayerProfileInGameContext(profileData.playerId, profileData.name, profileData.avatar);
 					}
 				}
@@ -136,9 +126,7 @@ export class MainScene extends BaseScene {
 				// Handle score broadcasts
 				if (ev.data?.type === "scoreUpdate" && ev.data?.scoreData) {
 					const scoreData = ev.data.scoreData;
-					if (scoreData.playerId && scoreData.playerId !== this.game.selfId) {
-						gameVars.allPlayersScores[scoreData.playerId] = scoreData.score;
-						// Also update score in GameContext for settlement consistency
+					if (scoreData.playerId && scoreData.playerId !== this.gameContext.currentPlayer.id) {
 						this.updatePlayerScoreInGameContext(scoreData.playerId, scoreData.score);
 					}
 				}
@@ -146,7 +134,7 @@ export class MainScene extends BaseScene {
 				// Handle affiliate post sharing broadcasts
 				if (ev.data?.type === "affiliatePostShared" && ev.data?.affiliateData) {
 					const affiliateData = ev.data.affiliateData as AffiliateBroadcastMessage;
-					if (affiliateData.playerId && affiliateData.playerId !== this.game.selfId) {
+					if (affiliateData.playerId && affiliateData.playerId !== this.gameContext.currentPlayer.id) {
 						// Add shared post to other players' timelines
 						this.addSharedPostToTimeline(affiliateData.sharedPost);
 					}
@@ -155,7 +143,7 @@ export class MainScene extends BaseScene {
 				// Handle affiliate purchase notifications
 				if (ev.data?.type === "affiliatePurchase" && ev.data?.purchaseData) {
 					const purchaseData = ev.data.purchaseData as AffiliatePurchaseMessage;
-					if (purchaseData.sharerId === this.game.selfId) {
+					if (purchaseData.sharerId === this.gameContext.currentPlayer.id) {
 						// Reward the sharer with affiliate points
 						this.awardAffiliateReward(purchaseData.rewardPoints, purchaseData.buyerName);
 					}
@@ -166,7 +154,7 @@ export class MainScene extends BaseScene {
 				// Handle player joining broadcasts
 				if (ev.data?.type === "playerJoined" && ev.data?.playerData) {
 					const joinData = ev.data.playerData;
-					if (joinData.playerId && joinData.playerId !== this.game.selfId) {
+					if (joinData.playerId && joinData.playerId !== this.gameContext.currentPlayer.id) {
 						// Create PlayerData from broadcast and add to GameContext
 						this.addPlayerFromBroadcast(joinData);
 					}
@@ -175,7 +163,7 @@ export class MainScene extends BaseScene {
 				// Handle task completion broadcasts
 				if (ev.data?.type === "taskCompletion" && ev.data?.taskData) {
 					const taskData = ev.data.taskData;
-					if (taskData.playerId && taskData.playerId !== this.game.selfId) {
+					if (taskData.playerId && taskData.playerId !== this.gameContext.currentPlayer.id) {
 						// Update task progress for other players in GameContext
 						this.updatePlayerTaskProgressInGameContext(taskData.playerId, taskData.taskId);
 					}
@@ -194,6 +182,13 @@ export class MainScene extends BaseScene {
 	}
 
 	/**
+	 * Gets the PointManager instance
+	 */
+	getPointManager(): PointManager | undefined {
+		return this.pointManager;
+	}
+
+	/**
 	 * Gets the GameContext instance
 	 */
 	getGameContext(): GameContext | undefined {
@@ -204,26 +199,23 @@ export class MainScene extends BaseScene {
 	 * Transitions to ranking scene when settlement is completed
 	 */
 	transitionToRanking(): void {
-		if (this.gameContext) {
-			const rankingScene = new RankingScene({
-				game: this.game,
-				gameContext: this.gameContext!
-			});
-			this.swipeOut(rankingScene);
-		}
+		const rankingScene = new RankingScene({
+			game: this.game,
+			gameContext: this.gameContext!,
+			pointManager: this.pointManager!
+		});
+		this.swipeOut(rankingScene);
 	}
 
 	/**
 	 * Updates current player score in GameContext (called when local score changes)
 	 */
 	updateCurrentPlayerScore(score: number): void {
-		if (!this.gameContext) return;
-
 		const currentPlayer = this.gameContext.currentPlayer;
 		const updatedPlayer = {
 			...currentPlayer,
 			points: score,
-			lastActiveAt: this.game.age
+			lastActiveAt: this.gameContext.getCurrentTimestamp()
 		};
 		this.gameContext.updateCurrentPlayer(updatedPlayer);
 	}
@@ -345,54 +337,25 @@ export class MainScene extends BaseScene {
 	/**
 	 * Adds a player to GameContext from broadcast data
 	 */
-	private addPlayerFromBroadcast(joinData: any): void {
-		if (!this.gameContext) return;
-
+	private addPlayerFromBroadcast(joinData: PlayerData): void {
 		// Create PlayerData from broadcast data
-		const playerData = createPlayerData(joinData.profile, joinData.joinedAt);
+		const playerData = createPlayerData(joinData.id, joinData.profile, joinData.joinedAt);
 		playerData.points = joinData.points;
 		playerData.ownedItems = joinData.ownedItems || [];
 		playerData.lastActiveAt = joinData.lastActiveAt;
-
-		this.gameContext.addPlayer(joinData.playerId, playerData);
-	}
-
-	/**
-	 * Adds current player to GameContext with proper ID
-	 */
-	private addCurrentPlayerToGameContext(): void {
-		if (!this.gameContext) return;
-
-		const gameVars = this.game.vars as GameVars;
-		const currentPlayerId = this.game.selfId || "player_self";
-
-		// Remove the default "current" entry since we'll add with proper ID
-		this.gameContext.removePlayer("current");
-
-		// Create PlayerData for current player with updated info
-		const playerData = createPlayerData({
-			name: gameVars.playerProfile.name,
-			avatar: gameVars.playerProfile.avatar
-		}, this.game.age);
-
-		// Override initial points with current score
-		playerData.points = gameVars.gameState.score;
-
-		this.gameContext.addPlayer(currentPlayerId, playerData);
+		this.gameContext.addPlayer(joinData.id, playerData);
 	}
 
 	/**
 	 * Updates player score in GameContext
 	 */
 	private updatePlayerScoreInGameContext(playerId: string, score: number): void {
-		if (!this.gameContext) return;
-
 		const player = this.gameContext.allPlayers.get(playerId);
 		if (player) {
 			const updatedPlayer = {
 				...player,
 				points: score,
-				lastActiveAt: this.game.age
+				lastActiveAt: this.gameContext.getCurrentTimestamp()
 			};
 			// For other players, we need to remove and re-add since there's no updatePlayer method
 			this.gameContext.removePlayer(playerId);
@@ -404,14 +367,12 @@ export class MainScene extends BaseScene {
 	 * Updates player profile in GameContext
 	 */
 	private updatePlayerProfileInGameContext(playerId: string, name: string, avatar: string): void {
-		if (!this.gameContext) return;
-
 		const player = this.gameContext.allPlayers.get(playerId);
 		if (player) {
 			const updatedPlayer = {
 				...player,
 				profile: { name, avatar },
-				lastActiveAt: this.game.age
+				lastActiveAt: this.gameContext.getCurrentTimestamp()
 			};
 			// For other players, we need to remove and re-add since there's no updatePlayer method
 			this.gameContext.removePlayer(playerId);
@@ -423,21 +384,19 @@ export class MainScene extends BaseScene {
 	 * Updates player task progress in GameContext
 	 */
 	private updatePlayerTaskProgressInGameContext(playerId: string, taskId: string): void {
-		if (!this.gameContext) return;
-
 		const player = this.gameContext.allPlayers.get(playerId);
 		if (player) {
 			const updatedTaskProgress = new Map(player.taskProgress);
 			updatedTaskProgress.set(taskId, {
 				taskId: taskId,
 				completed: true,
-				completedAt: this.game.age
+				completedAt: this.gameContext.getCurrentTimestamp()
 			});
 
 			const updatedPlayer = {
 				...player,
 				taskProgress: updatedTaskProgress,
-				lastActiveAt: this.game.age
+				lastActiveAt: this.gameContext.getCurrentTimestamp()
 			};
 			// For other players, we need to remove and re-add since there's no updatePlayer method
 			this.gameContext.removePlayer(playerId);
@@ -449,20 +408,12 @@ export class MainScene extends BaseScene {
 	 * Broadcasts current player joining to all other players
 	 */
 	private broadcastPlayerJoining(): void {
-		const gameVars = this.game.vars as GameVars;
-		if (gameVars.mode === "multi" && this.game.selfId) {
+		if (this.gameContext.gameMode.mode === "multi") {
 			const message = {
 				type: "playerJoined",
 				playerData: {
-					playerId: this.game.selfId,
-					profile: {
-						name: gameVars.playerProfile.name,
-						avatar: gameVars.playerProfile.avatar
-					},
-					points: gameVars.gameState.score,
-					ownedItems: [],
-					joinedAt: this.game.age,
-					lastActiveAt: this.game.age
+					playerId: this.gameContext.currentPlayer.id,
+					...this.gameContext.currentPlayer
 				}
 			};
 
@@ -477,16 +428,21 @@ export class MainScene extends BaseScene {
 	protected override onSwipeIn(): void {
 		const agreement = new AgreementE({
 			scene: this,
+			multi: this.gameContext.gameMode.mode === "multi",
+			onPointsAwarded: (points: number) => {
+				// Award agreement points using PointManager
+				if (this.pointManager) {
+					this.pointManager.awardPoints(points, "join", "Agreement completion reward");
+				}
+			},
 			onComplete: () => {
-				const gameVars = this.game.vars as GameVars;
-
 				// Create header at scene level (always visible)
 				this.header = new HeaderE({
 					scene: this,
 					width: this.game.width,
 					height: 80,
-					score: gameVars.gameState.score,
-					remainingSec: gameVars.totalTimeLimit
+					score: this.gameContext.currentPlayer.points,
+					remainingSec: this.gameContext.gameState.remainingTime
 				});
 				this.append(this.header);
 
@@ -504,6 +460,7 @@ export class MainScene extends BaseScene {
 					header: this.header,
 					gameContext: this.gameContext!,
 					marketManager: this.marketManager!,
+					pointManager: this.pointManager!,
 					updateCurrentPlayerScore: (score: number) => this.updateCurrentPlayerScore(score),
 					transitionToRanking: () => this.transitionToRanking()
 				});
@@ -511,8 +468,7 @@ export class MainScene extends BaseScene {
 				// Add any pending shared posts that were received before HomeE was created
 				this.addPendingSharedPosts();
 
-				// Add current player to GameContext and broadcast joining
-				this.addCurrentPlayerToGameContext();
+				// Broadcast joining
 				this.broadcastPlayerJoining();
 
 				new Timeline(this).create(this.home)

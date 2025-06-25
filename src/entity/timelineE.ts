@@ -2,6 +2,7 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { AffiliatePurchaseMessage } from "../data/affiliateMessages";
 import { ItemData } from "../data/itemData";
+import { DUMMY_ID_FOR_ACTIVE_INSTANCE } from "../data/playerData";
 import { SharedPostData } from "../data/sharedPostData";
 import { ItemManager } from "../manager/itemManager";
 import { LabelButtonE } from "./labelButtonE";
@@ -31,6 +32,8 @@ interface LayoutConfig {
  * Parameter object for Timeline
  */
 export interface TimelineParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -55,6 +58,7 @@ export interface TimelineParameterObject extends g.EParameterObject {
  * Timeline section component that displays timeline items
  */
 export class TimelineE extends g.E {
+	private readonly multi: boolean;
 	private readonly layout: LayoutConfig;
 	private readonly itemManager: ItemManager;
 	private readonly onAffiliatePurchase?: (postId: string, buyerName: string, rewardPoints: number) => void;
@@ -67,6 +71,11 @@ export class TimelineE extends g.E {
 	private affiliateButtons: Map<string, LabelButtonE<string>> = new Map();
 	private timelineItems: g.E[] = [];
 	private loadingOverlay?: g.E;
+	private scrollContainer?: g.E;
+	private scrollOffset: number = 0;
+	private maxScrollOffset: number = 0;
+	private lastScrollY: number = 0;
+	private isScrolling: boolean = false;
 
 	/**
 	 * Creates a new Timeline instance
@@ -75,6 +84,7 @@ export class TimelineE extends g.E {
 	constructor(options: TimelineParameterObject) {
 		super(options);
 
+		this.multi = options.multi;
 		this.itemManager = options.itemManager;
 		this.onAffiliatePurchase = options.onAffiliatePurchase;
 		this.onCheckPoints = options.onCheckPoints;
@@ -166,7 +176,45 @@ export class TimelineE extends g.E {
 	 */
 	private createLayout(): void {
 		this.createHeader();
+		this.createScrollableContainer();
 		this.createTimelineItems();
+	}
+
+
+	/**
+	 * Handles scroll start
+	 */
+	private handleScrollStart(ev: g.PointDownEvent): void {
+		this.isScrolling = true;
+		this.lastScrollY = ev.point.y;
+	}
+
+	/**
+	 * Handles scroll movement
+	 */
+	private handleScrollMove(ev: g.PointMoveEvent): void {
+		if (!this.isScrolling || !this.scrollContainer) return;
+
+		this.scrollOffset += ev.prevDelta.y;
+
+		// Clamp scroll offset (negative values scroll down, positive scroll up)
+		this.scrollOffset = Math.max(-this.maxScrollOffset, Math.min(this.scrollOffset, 0));
+
+		// Update all timeline items position based on scroll offset
+		this.timelineItems.forEach((item, index) => {
+			const baseY = this.layout.children!.item.y + (index * 90);
+			item.y = baseY + this.scrollOffset;
+			item.modified();
+		});
+
+		this.lastScrollY = ev.point.y;
+	}
+
+	/**
+	 * Handles scroll end
+	 */
+	private handleScrollEnd(ev: g.PointUpEvent): void {
+		this.isScrolling = false;
 	}
 
 	/**
@@ -190,6 +238,29 @@ export class TimelineE extends g.E {
 			y: this.layout.y + titleLayout.y,
 		});
 		this.append(timelineTitle);
+	}
+
+	/**
+	 * Creates a scrollable container for timeline content
+	 */
+	private createScrollableContainer(): void {
+		// Create scrollable container that clips content
+		this.scrollContainer = new g.E({
+			scene: this.scene,
+			width: this.layout.width,
+			height: this.layout.height - 35, // Subtract header height
+			x: this.layout.x,
+			y: this.layout.y + 35, // Position below header
+			touchable: true,
+			local: true // Enable local coordinates for proper scrolling
+		});
+
+		// Add scroll event handling
+		this.scrollContainer.onPointDown.add((ev) => this.handleScrollStart(ev));
+		this.scrollContainer.onPointMove.add((ev) => this.handleScrollMove(ev));
+		this.scrollContainer.onPointUp.add((ev) => this.handleScrollEnd(ev));
+
+		this.append(this.scrollContainer);
 	}
 
 	/**
@@ -219,28 +290,33 @@ export class TimelineE extends g.E {
 	 */
 	private createTimelineItems(): void {
 		const defaultItems = [
-			{ user: "ユーザー1", action: "マンガ全巻セット買いました！", reactions: { like: true, comment: true } },
-			{ user: "ユーザー2", action: "小説の予約を探しています。元ってくれる方いませんか？", reactions: { like: true, comment: true } },
-			{ user: "[公式] ポイ活ウォーズ", action: "本日限定！通販で使える20%ポイント還元キャンペーン実施中！", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーがシェアした商品を購入できます", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "💰 アフィリエイト機能で商品をシェアして、購入されるとポイント獲得！", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "🛒 商品を購入すると、シェアした人にアフィリエイト報酬が入ります", reactions: { like: true, comment: true } },
 		];
 
 		let itemIndex = 0;
 
 		// Add shared posts first
 		this.sharedPosts.forEach((sharedPost) => {
-			const itemY = this.layout.y + this.layout.children!.item.y + (itemIndex * 90);
-			const postItem = this.createAffiliateTimelineItem(sharedPost, this.layout.x, itemY);
+			const itemY = this.layout.children!.item.y + (itemIndex * 90); // Relative to scroll container
+			const postItem = this.createAffiliateTimelineItem(sharedPost, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
 			itemIndex++;
 		});
 
 		// Add default items
 		defaultItems.forEach((item) => {
-			const itemY = this.layout.y + this.layout.children!.item.y + (itemIndex * 90);
-			const postItem = this.createTimelineItem(item.user, item.action, item.reactions, this.layout.x, itemY);
+			const itemY = this.layout.children!.item.y + (itemIndex * 90); // Relative to scroll container
+			const postItem = this.createTimelineItem(item.user, item.action, item.reactions, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
 			itemIndex++;
 		});
+
+		// Calculate max scroll offset based on content height
+		const totalContentHeight = (itemIndex * 90) + this.layout.children!.item.y;
+		const containerHeight = this.scrollContainer ? this.scrollContainer.height : this.layout.height - 35;
+		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
 	}
 
 	/**
@@ -348,6 +424,7 @@ export class TimelineE extends g.E {
 			// Buy button for affiliate purchase
 			const buyButton = new LabelButtonE({
 				scene: this.scene,
+				multi: this.multi,
 				name: `affiliate_buy_${sharedPost.id}`,
 				args: sharedPost.id,
 				text: isAlreadyOwned ? "所持済" : "購入",
@@ -370,8 +447,16 @@ export class TimelineE extends g.E {
 			postContainer.append(buyButton);
 		}
 
-		// Append container to timeline and return it
-		this.append(postContainer);
+		// Append container to scroll container and return it
+		if (this.scrollContainer) {
+			// Adjust position relative to scroll container
+			postContainer.x -= this.scrollContainer.x;
+			postContainer.y -= this.scrollContainer.y;
+			postContainer.modified();
+			this.scrollContainer.append(postContainer);
+		} else {
+			this.append(postContainer);
+		}
 		return postContainer;
 	}
 
@@ -440,7 +525,7 @@ export class TimelineE extends g.E {
 
 		const purchaseMessage: AffiliatePurchaseMessage = {
 			postId: postId,
-			buyerId: this.scene.game.selfId || "unknown",
+			buyerId: this.scene.game.selfId ?? DUMMY_ID_FOR_ACTIVE_INSTANCE,
 			buyerName: buyerName,
 			sharerId: sharedPost.sharerId, // Use sharerId instead of sharerName for proper ID comparison
 			rewardPoints: affiliateReward
@@ -539,8 +624,12 @@ export class TimelineE extends g.E {
 		});
 		postContainer.append(actionText);
 
-		// Append container to timeline and return it
-		this.append(postContainer);
+		// Append container to scroll container and return it
+		if (this.scrollContainer) {
+			this.scrollContainer.append(postContainer);
+		} else {
+			this.append(postContainer);
+		}
 		return postContainer;
 	}
 
@@ -550,6 +639,7 @@ export class TimelineE extends g.E {
 	private showErrorModal(title: string, message: string, postId: string): void {
 		const modal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `error_modal_${postId}`,
 			args: null,
 			title: title,

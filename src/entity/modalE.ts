@@ -8,6 +8,7 @@ import { PanelE } from "./panelE";
  */
 export class ModalE<T> extends g.E {
 	static assetIds: string[] = [...PanelE.assetIds];
+	readonly multi: boolean;
 	readonly overlay: g.FilledRect;
 	readonly content: PanelE;
 	private _closeButton: LabelButtonE<T>;
@@ -18,6 +19,7 @@ export class ModalE<T> extends g.E {
 	 * Creates a new Modal instance
 	 * @param options Configuration options for the modal
 	 * @param options.scene The game scene to attach the modal to
+	 * @param options.multi Whether this modal is used in multiplayer mode
 	 * @param options.name Unique name identifier for the modal
 	 * @param options.args Arguments associated with this modal
 	 * @param options.title Title text displayed at the top of the modal
@@ -29,6 +31,7 @@ export class ModalE<T> extends g.E {
 	constructor(options: {
 		scene: g.Scene;
 		name: string;
+		multi: boolean;
 		args: T;
 		title: string;
 		message: string;
@@ -41,6 +44,8 @@ export class ModalE<T> extends g.E {
 			width: options.scene.game.width,
 			height: options.scene.game.height
 		});
+
+		this.multi = options.multi;
 
 		const modalWidth = options.width || 400;
 		const modalHeight = options.height || 200;
@@ -103,6 +108,7 @@ export class ModalE<T> extends g.E {
 		// Close button
 		this._closeButton = new LabelButtonE({
 			scene: options.scene,
+			multi: this.multi,
 			name: options.name,
 			args: options.args,
 			text: "Close",
@@ -191,6 +197,7 @@ export class ModalE<T> extends g.E {
 
 			const button = new LabelButtonE({
 				scene: this.scene,
+				multi: this.multi,
 				name: `${this._closeButton.name}_button_${index}`,
 				args: this._closeButton.msgArgs,
 				text: buttonOptions.text,

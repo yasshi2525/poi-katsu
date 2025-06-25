@@ -1,5 +1,8 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
+import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
+import { getAllTaskMetadata } from "../data/taskConstants";
+import { PointManager } from "../manager/pointManager";
 import { LabelButtonE } from "./labelButtonE";
 
 /**
@@ -53,12 +56,16 @@ interface ScoreSource {
  */
 export class ScoreBreakdownE extends g.E {
 	private player: PlayerData;
+	private gameContext: GameContext;
+	private pointManager: PointManager;
 	private onCloseCallback: () => void;
 	private scoreItems: ScoreSource[];
 
 	constructor(param: {
 		scene: g.Scene;
 		player: PlayerData;
+		gameContext: GameContext;
+		pointManager: PointManager;
 		onClose: () => void;
 	}) {
 		super({
@@ -69,6 +76,8 @@ export class ScoreBreakdownE extends g.E {
 		});
 
 		this.player = param.player;
+		this.gameContext = param.gameContext;
+		this.pointManager = param.pointManager;
 		this.onCloseCallback = param.onClose;
 		this.scoreItems = [];
 
@@ -97,39 +106,114 @@ export class ScoreBreakdownE extends g.E {
 	private calculateScoreBreakdown(): void {
 		this.scoreItems = [];
 
-		// Show a simple breakdown with available real data
-		this.scoreItems.push({
-			category: "総合スコア",
-			description: `最終スコア: ${this.player.points}pt`,
-			points: this.player.points,
-		});
+		// Use centralized task metadata instead of duplicated lookup
+		const taskMetadata = getAllTaskMetadata();
 
-		// Show task completion information if available
-		const taskCount = this.player.taskProgress?.size || 0;
-		if (taskCount > 0) {
-			this.scoreItems.push({
-				category: "タスク完了",
-				description: `完了タスク数: ${taskCount}個`,
-				points: 0, // Points are included in total score
-			});
+		// Show achieved tasks with their reward points
+		const achievedTaskIds = this.gameContext.getAchievedTaskIds();
+		let totalTaskPoints = 0;
+
+		if (achievedTaskIds.length > 0) {
+			for (const taskId of achievedTaskIds) {
+				const taskInfo = taskMetadata[taskId];
+				if (taskInfo) {
+					this.scoreItems.push({
+						category: "タスク報酬",
+						description: `${taskInfo.title}`,
+						points: taskInfo.rewardPoints,
+						timestamp: Date.now() // Placeholder for task completion time
+					});
+					totalTaskPoints += taskInfo.rewardPoints;
+				}
+			}
 		}
 
 		// Show item information if available
 		const itemCount = this.player.preSettlementItemCount ?? (this.player.ownedItems?.length || 0);
 		if (itemCount > 0) {
 			this.scoreItems.push({
-				category: "アイテム取得",
-				description: `取得アイテム数: ${itemCount}個`,
-				points: 0, // Points are included in total score
+				category: "ショッピング",
+				description: `アイテム購入数: ${itemCount}個`,
+				points: 0, // Points are included in total score, but shows spending activity
 			});
 		}
 
-		// Add note about detailed tracking
+		// Calculate specific point source categories from remaining points
+		const remainingPoints = this.player.points - totalTaskPoints;
+		if (remainingPoints > 0) {
+			// Break down remaining points into estimated categories
+			// This is an approximation since we don't have transaction history here
+			const estimatedBreakdown = this.estimatePointSourceBreakdown(remainingPoints);
+
+			estimatedBreakdown.forEach(item => {
+				if (item.points > 0) {
+					this.scoreItems.push(item);
+				}
+			});
+		}
+
+		// Show total
 		this.scoreItems.push({
-			category: "注意",
-			description: "詳細なスコア履歴は未実装です",
-			points: 0,
+			category: "合計スコア",
+			description: "最終スコア",
+			points: this.player.points,
 		});
+	}
+
+	/**
+	 * Gets actual point source breakdown from PointManager transaction history
+	 */
+	private estimatePointSourceBreakdown(totalNonTaskPoints: number): ScoreSource[] {
+		const breakdown: ScoreSource[] = [];
+
+		// Get actual point summary by source from PointManager
+		const pointSummary = this.pointManager.getPointSummaryBySource();
+
+		// Map source categories to Japanese descriptions
+		const sourceDescriptions: Record<string, string> = {
+			"ads": "広告クリック",
+			"affiliate": "アフィリエイト",
+			"shopping": "ショッピング",
+			"join": "サービス参加",
+			"other": "その他活動"
+		};
+
+		// Convert point summary to breakdown format with Japanese descriptions
+		pointSummary.forEach((points, source) => {
+			if (source !== "tasks" && points > 0) { // Exclude tasks as they're handled separately
+				breakdown.push({
+					category: sourceDescriptions[source] || source,
+					description: this.getSourceDescription(source),
+					points: points,
+				});
+			}
+		});
+
+		// If no transaction history available, fall back to estimation
+		if (breakdown.length === 0 && totalNonTaskPoints > 0) {
+			breakdown.push({
+				category: "その他",
+				description: "各種活動による獲得ポイント",
+				points: totalNonTaskPoints,
+			});
+		}
+
+		return breakdown;
+	}
+
+	/**
+	 * Gets detailed Japanese description for point sources
+	 */
+	private getSourceDescription(source: string): string {
+		const descriptions: Record<string, string> = {
+			"ads": "バナー広告のクリック報酬",
+			"affiliate": "商品シェア・購入コミッション",
+			"shopping": "商品購入による支出",
+			"join": "サービス利用開始ボーナス",
+			"other": "タイムライン活動等"
+		};
+
+		return descriptions[source] || "各種ゲーム活動";
 	}
 
 	/**
@@ -368,6 +452,7 @@ export class ScoreBreakdownE extends g.E {
 		// Close button
 		const closeButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
 			text: "閉じる",
 			fontSize: 14,
 			fontFamily: "sans-serif",

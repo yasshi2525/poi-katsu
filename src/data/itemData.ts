@@ -1,3 +1,5 @@
+import { POINT_CONSTANTS } from "../manager/pointManager";
+
 /**
  * Item data interface representing a purchasable product
  * Moved from manager/itemManager.ts to centralize data models
@@ -112,14 +114,14 @@ export function getItemCategoryInfo(categoryId: "novel" | "manga"): ItemCategory
 			name: "小説シリーズ",
 			description: "上巻・下巻の2冊セット",
 			emoji: "📖",
-			setBonusDescription: "セット完成で1,000ポイント"
+			setBonusDescription: `セット完成で${POINT_CONSTANTS.SET_CLOTHES_BONUS}ポイント`
 		},
 		manga: {
 			id: "manga",
 			name: "マンガシリーズ",
 			description: "1巻〜5巻の5冊セット",
 			emoji: "📚",
-			setBonusDescription: "セット完成で2,500ポイント"
+			setBonusDescription: `セット完成で${POINT_CONSTANTS.SET_ELECTRONICS_BONUS}ポイント`
 		}
 	};
 

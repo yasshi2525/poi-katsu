@@ -12,8 +12,6 @@ export const AFFILIATE_CONFIG = {
 		MIN_PRICE_RATIO: 0.3,
 		/** Price volatility factor for time-based fluctuation (increased for more dramatic changes) */
 		VOLATILITY: 0.8,
-		/** Total game time in seconds for price calculations */
-		TOTAL_GAME_TIME: 120,
 	},
 
 	/** Timeline configuration */

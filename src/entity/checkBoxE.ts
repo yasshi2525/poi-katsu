@@ -4,6 +4,8 @@ import { ButtonE, ButtonEParameterObject } from "./buttonE";
  * Parameter object for CheckBoxE
  */
 export interface CheckBoxEParameterObject extends g.EParameterObject {
+	/** Whether in multiplayer mode */
+	multi: boolean;
 	/** Unique name identifier for the checkbox */
 	name: string;
 	/** Image asset for the checkbox frames */

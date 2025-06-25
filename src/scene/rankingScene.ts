@@ -1,5 +1,6 @@
 import { GameContext } from "../data/gameContext";
 import { PlayerRankingE } from "../entity/playerRankingE";
+import { PointManager } from "../manager/pointManager";
 import { BaseScene } from "./baseScene";
 
 /**
@@ -8,9 +9,10 @@ import { BaseScene } from "./baseScene";
  */
 export class RankingScene extends BaseScene {
 	private gameContext: GameContext;
+	private pointManager: PointManager;
 	private rankingDisplay?: PlayerRankingE;
 
-	constructor(param: g.SceneParameterObject & { gameContext: GameContext }) {
+	constructor(param: g.SceneParameterObject & { gameContext: GameContext; pointManager: PointManager }) {
 		super({
 			...param,
 			assetIds: [
@@ -20,6 +22,7 @@ export class RankingScene extends BaseScene {
 		});
 
 		this.gameContext = param.gameContext;
+		this.pointManager = param.pointManager;
 
 		this.onLoad.add(() => {
 			this.setupRankingDisplay();
@@ -40,7 +43,8 @@ export class RankingScene extends BaseScene {
 	private setupRankingDisplay(): void {
 		this.rankingDisplay = new PlayerRankingE({
 			scene: this,
-			gameContext: this.gameContext
+			gameContext: this.gameContext,
+			pointManager: this.pointManager
 		});
 
 		this.append(this.rankingDisplay);

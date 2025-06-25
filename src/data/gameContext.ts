@@ -1,6 +1,6 @@
 
 import { NotificationData } from "./notificationData";
-import { PlayerData, createPlayerData } from "./playerData";
+import { PlayerData, PlayerProfile, createPlayerData } from "./playerData";
 
 /**
  * Game phase enumeration representing different stages of the game
@@ -24,8 +24,6 @@ export enum GamePhase {
  * Game state information
  */
 export interface GameState {
-	/** Current total score/points */
-	score: number;
 	/** Current game phase */
 	phase: GamePhase;
 	/** Game start time - timestamp in milliseconds */
@@ -34,6 +32,8 @@ export interface GameState {
 	totalTimeLimit: number;
 	/** Remaining time in seconds */
 	remainingTime: number;
+	/** Remaining time in frames for consistent cross-scene timing */
+	remainingFrame: number;
 	/** Whether the game is paused */
 	paused: boolean;
 }
@@ -43,7 +43,7 @@ export interface GameState {
  */
 export interface GameMode {
 	/** Game mode type */
-	mode: "ranking" | "multi_admission";
+	mode: "ranking" | "multi";
 	/** Maximum number of players */
 	maxPlayers: number;
 	/** Current number of players */
@@ -57,63 +57,83 @@ export interface GameMode {
 export class GameContext {
 	private _gameState: GameState;
 	private _gameMode: GameMode;
+	private _refGameVarsGameState: { score: number };
+	private _fps: number;
+	private _localRandom: g.RandomGenerator;
 	private _currentPlayer: PlayerData;
 	private _allPlayers: Map<string, PlayerData>;
 	private _notifications: NotificationData[];
 	private _eventListeners: Map<string, Array<(data: any) => void>>;
+	private _achievedTaskIds: Set<string>;
 
 	/**
 	 * Creates a game context for testing with default values
-	 * @param currentTime Current timestamp (optional, defaults to 0 for testing)
 	 * @returns GameContext instance for testing
 	 */
-	static createForTesting(currentTime: number = 0): GameContext {
+	static createForTesting(playerId: string, mode: "ranking" | "multi" = "ranking"): GameContext {
 		const testPlayer: PlayerData = createPlayerData(
-			{ name: "テストプレイヤー", avatar: "😀" },
-			currentTime
+			playerId,
+			{ name: "プレイヤー", avatar: "😀" },
+			0
 		);
 
 		const testGameMode: GameMode = {
-			mode: "ranking",
+			mode: mode,
 			maxPlayers: 4,
 			currentPlayers: 1
 		};
 
-		return new GameContext(testPlayer, testGameMode, 120, currentTime);
+		return new GameContext(testPlayer, testGameMode, { score: testPlayer.points });
 	}
 
-	constructor(initialPlayerData: PlayerData, gameMode: GameMode, timeLimit: number = 120, currentTime: number = 0) {
+	constructor(
+		initialPlayerData: PlayerData,
+		gameMode: GameMode,
+		refGameVarsGameState: { score: number },
+		localRandom: g.RandomGenerator = new g.XorshiftRandomGenerator(0),
+		timeLimit: number = 120,
+		fps: number = 60,
+		currentTime: number = 0
+	) {
+		this._refGameVarsGameState = refGameVarsGameState;
 		this._gameState = {
-			score: initialPlayerData.points,
 			phase: GamePhase.INITIAL,
 			startTime: currentTime,
 			totalTimeLimit: timeLimit,
 			remainingTime: timeLimit,
+			remainingFrame: timeLimit * fps, // Convert seconds to frames
 			paused: false
 		};
+		this._fps = fps;
+		this._localRandom = localRandom;
 
 		this._gameMode = gameMode;
 		this._currentPlayer = initialPlayerData;
 		this._allPlayers = new Map();
 		this._notifications = [];
 		this._eventListeners = new Map();
+		this._achievedTaskIds = new Set();
 
 		// Add current player to all players map
-		this._allPlayers.set("current", this._currentPlayer);
+		this._allPlayers.set(this._currentPlayer.id, this._currentPlayer);
 	}
 
 	/**
 	 * Gets the current game mode
 	 */
-	get gameMode(): GameMode {
-		return { ...this._gameMode };
+	get gameMode(): Readonly<GameMode> {
+		return this._gameMode;
+	}
+
+	get localRandom(): g.RandomGenerator {
+		return this._localRandom;
 	}
 
 	/**
 	 * Gets the current player data
 	 */
-	get currentPlayer(): PlayerData {
-		return { ...this._currentPlayer };
+	get currentPlayer(): Readonly<PlayerData> {
+		return this._currentPlayer;
 	}
 
 	/**
@@ -136,9 +156,16 @@ export class GameContext {
 	 */
 	updateCurrentPlayer(playerData: PlayerData): void {
 		this._currentPlayer = playerData;
-		this._allPlayers.set("current", playerData);
-		this._gameState.score = playerData.points;
+		this._allPlayers.set(playerData.id, playerData);
+		this._refGameVarsGameState.score = playerData.points;
 		this.emit("playerUpdated", playerData);
+	}
+
+	updatePlayerProfile(playerId: string, profile: PlayerProfile): void {
+		const player = this._allPlayers.get(playerId);
+		if (player) {
+			player.profile = profile;
+		}
 	}
 
 	/**
@@ -152,17 +179,34 @@ export class GameContext {
 	}
 
 	/**
-	 * Updates the remaining time
-	 * @param remainingTime New remaining time in seconds
+	 * Decrement the remaining time in frames for consistent cross-scene timing
+	 * @returns whether the time was decremented successfully
 	 */
-	updateRemainingTime(remainingTime: number): void {
-		this._gameState.remainingTime = Math.max(0, remainingTime);
-		this.emit("timeUpdated", this._gameState.remainingTime);
+	decrementRemainingFrame(): boolean {
+		if (this._gameState.remainingFrame <= 0) {
+			return false; // No time left to decrement
+		}
+
+		this._gameState.remainingFrame--;
+		// Also update remainingTime for backward compatibility
+		const oldRemainingTime = this._gameState.remainingTime;
+		this._gameState.remainingTime = Math.max(0, Math.floor(this._gameState.remainingFrame / this._fps));
+		if (this._gameState.remainingTime !== oldRemainingTime) {
+			this.emit("timeUpdated", this._gameState.remainingTime);
+		}
+		if (this._gameState.remainingFrame <= 0) {
+			this.emit("timeEnded", null);
+		}
 
 		// Check if time has run out
-		if (this._gameState.remainingTime <= 0 && this._gameState.phase !== GamePhase.ENDED) {
+		if (this._gameState.remainingFrame <= 0 && this._gameState.phase !== GamePhase.ENDED) {
 			this.updateGamePhase(GamePhase.SETTLEMENT);
 		}
+		return true; // Successfully decremented time
+	}
+
+	getCurrentTimestamp(): number {
+		return this._gameState.totalTimeLimit * this._fps - this._gameState.remainingFrame;
 	}
 
 	/**
@@ -230,8 +274,8 @@ export class GameContext {
 	 * @returns Array of players sorted by score (highest first)
 	 */
 	getPlayerRanking(): Array<{ playerId: string; playerData: PlayerData; rank: number }> {
-		const players = Array.from(this._allPlayers.entries());
-		players.sort((a, b) => b[1].points - a[1].points);
+		const players = Array.from(this._allPlayers.entries())
+			.sort((a, b) => b[1].points - a[1].points);
 
 		return players.map(([playerId, playerData], index) => ({
 			playerId,
@@ -268,6 +312,39 @@ export class GameContext {
 	}
 
 	/**
+	 * Gets the current game state
+	 */
+	get gameState(): Readonly<GameState> {
+		return this._gameState;
+	}
+
+	/**
+	 * Adds a task ID to the achieved tasks list
+	 * @param taskId Task ID to mark as achieved
+	 */
+	addAchievedTask(taskId: string): void {
+		this._achievedTaskIds.add(taskId);
+		this.emit("taskAchieved", taskId);
+	}
+
+	/**
+	 * Gets all achieved task IDs
+	 * @returns Array of achieved task IDs
+	 */
+	getAchievedTaskIds(): string[] {
+		return Array.from(this._achievedTaskIds);
+	}
+
+	/**
+	 * Checks if a task has been achieved
+	 * @param taskId Task ID to check
+	 * @returns True if task has been achieved, false otherwise
+	 */
+	hasAchievedTask(taskId: string): boolean {
+		return this._achievedTaskIds.has(taskId);
+	}
+
+	/**
 	 * Emits an event to all registered listeners
 	 * @param event Event name
 	 * @param data Event data
@@ -277,12 +354,5 @@ export class GameContext {
 		if (listeners) {
 			listeners.forEach(listener => listener(data));
 		}
-	}
-
-	/**
-	 * Gets the current game state
-	 */
-	get gameState(): GameState {
-		return { ...this._gameState };
 	}
 }

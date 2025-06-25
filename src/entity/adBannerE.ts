@@ -42,6 +42,8 @@ interface BannerItem {
  * Parameter object for AdBanner
  */
 export interface AdBannerParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -54,6 +56,7 @@ export interface AdBannerParameterObject extends g.EParameterObject {
  * Banner section component that displays promotional banners
  */
 export class AdBannerE extends g.E {
+	private readonly multi: boolean;
 	private readonly banners: BannerData[];
 	private readonly layout: LayoutConfig;
 	private currentBannerItem?: BannerItem;
@@ -65,6 +68,7 @@ export class AdBannerE extends g.E {
 	constructor(options: AdBannerParameterObject) {
 		super(options);
 
+		this.multi = options.multi;
 		this.banners = options.banners;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 
@@ -244,6 +248,7 @@ export class AdBannerE extends g.E {
 		// Invisible button for click handling (covers entire banner)
 		const clickButton = new LabelButtonE({
 			scene: this.scene,
+			multi: this.multi,
 			name: `bannerClick_${banner.id}`,
 			args: banner.id,
 			width: this.layout.width,

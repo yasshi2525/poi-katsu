@@ -1,4 +1,5 @@
 import { Easing, Timeline } from "@akashic-extension/akashic-timeline";
+import { POINT_CONSTANTS } from "../manager/pointManager";
 import { CheckBoxE } from "./checkBoxE";
 import { ModalE } from "./modalE";
 
@@ -10,8 +11,12 @@ const config = {
  * Parameter object for AgreementE
  */
 export interface AgreementEParameterObject extends g.EParameterObject {
+	/** Whether multiplayer mode or not */
+	multi: boolean;
 	/** Callback function when agreement is completed */
 	onComplete?: () => void;
+	/** Callback function to award points */
+	onPointsAwarded?: (points: number) => void;
 }
 
 /**
@@ -20,10 +25,12 @@ export interface AgreementEParameterObject extends g.EParameterObject {
  */
 export class AgreementE extends g.E {
 	static assetIds: string[] = [...ModalE.assetIds, "checkbox-agreement"];
+	private readonly multi: boolean;
 	private checkBox!: CheckBoxE;
 	private modal!: ModalE<undefined>;
 	private agreementText: string;
 	private onCompleteHandler?: () => void;
+	private onPointsAwardedHandler?: (points: number) => void;
 
 	/**
 	 * Creates a new AgreementE instance
@@ -36,7 +43,9 @@ export class AgreementE extends g.E {
 			height: options.scene.game.height,
 		});
 
+		this.multi = options.multi;
 		this.onCompleteHandler = options.onComplete;
+		this.onPointsAwardedHandler = options.onPointsAwarded;
 		this.agreementText = this.createAgreementText();
 		this.createAgreementModal();
 	}
@@ -70,6 +79,7 @@ export class AgreementE extends g.E {
 
 		this.modal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "agreement-modal",
 			args: undefined,
 			title: "サービス利用開始",
@@ -87,6 +97,7 @@ export class AgreementE extends g.E {
 
 		this.checkBox = new CheckBoxE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "agreement-checkbox",
 			imageAsset: checkBoxAsset,
 			x: this.modal.content.width / 2,
@@ -135,13 +146,14 @@ export class AgreementE extends g.E {
 		// Show success modal with initial points
 		const successModal = new ModalE({
 			scene: this.scene,
+			multi: this.multi,
 			name: "success",
 			args: undefined,
 			title: "ようこそ！",
 			message: `ポイ活サービスへようこそ！
 
 初回登録ボーナスとして
-100ポイントを獲得しました！
+${POINT_CONSTANTS.TASK_AGREEMENT_REWARD}ポイントを獲得しました！
 
 ホーム画面から様々な機能を
 利用してポイントを稼ぎましょう！`,
@@ -160,8 +172,8 @@ export class AgreementE extends g.E {
 	 * Completes the initial task
 	 */
 	private completeTask(): void {
-		// Award initial points (this would typically update game state)
-		this.awardInitialPoints(100);
+		// Award initial points using the configured constant
+		this.awardInitialPoints(POINT_CONSTANTS.TASK_AGREEMENT_REWARD);
 
 		// Call completion handler
 		if (this.onCompleteHandler) {
@@ -177,10 +189,9 @@ export class AgreementE extends g.E {
 	 * @param points Number of points to award
 	 */
 	private awardInitialPoints(points: number): void {
-		// In a real implementation, this would update the game state
-		// For now, we'll just log the award
-
-		// This could trigger a points animation or update UI
-		// Example: this.scene.fire(new PointsAwardedEvent(points));
+		// Award points through the callback if provided
+		if (this.onPointsAwardedHandler) {
+			this.onPointsAwardedHandler(points);
+		}
 	}
 }

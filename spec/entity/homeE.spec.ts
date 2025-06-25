@@ -5,6 +5,7 @@ import { LabelButtonE } from "../../src/entity/labelButtonE";
 import { ModalE } from "../../src/entity/modalE";
 import { ProfileEditorE } from "../../src/entity/profileEditorE";
 import { MarketManager } from "../../src/manager/marketManager";
+import { PointManager } from "../../src/manager/pointManager";
 
 describe("HomeE", () => {
 	let home: HomeE;
@@ -19,8 +20,11 @@ describe("HomeE", () => {
 		gameVars.playerProfile = { name: "プレイヤー", avatar: "😀" };
 		gameVars.allPlayersProfiles = {};
 
+		// Create GameContext for testing
+		const gameContext = GameContext.createForTesting("test-player", "ranking");
+
 		// Mock getMarketManager method for tests
-		const marketManager = new MarketManager(scene, "ranking");
+		const marketManager = new MarketManager(scene, gameContext);
 		marketManager.initialize();
 		(scene as any).getMarketManager = () => marketManager;
 
@@ -34,9 +38,6 @@ describe("HomeE", () => {
 		});
 		scene.append(header);
 
-		// Create GameContext for testing
-		const gameContext = GameContext.createForTesting(scene.game.age);
-
 		// Create HomeE instance using global scene
 		home = new HomeE({
 			scene: scene,
@@ -45,6 +46,7 @@ describe("HomeE", () => {
 			header: header,
 			gameContext: gameContext,
 			marketManager: marketManager,
+			pointManager: new PointManager(gameContext, scene),
 			updateCurrentPlayerScore: (score: number) => { /* Mock function */ },
 			transitionToRanking: () => { /* Mock function */ },
 		});
@@ -438,7 +440,7 @@ describe("HomeE", () => {
 		it("should update score when task is completed", async () => {
 			// Get initial score
 			const initialScore = home.getScore();
-			expect(initialScore).toBe(500); // Default score from game vars
+			expect(initialScore).toBe(0); // Default initial points from POINT_CONSTANTS
 
 			// Complete profile task (50 points)
 			await completeTask("profile");
@@ -447,9 +449,9 @@ describe("HomeE", () => {
 			const finalScore = home.getScore();
 			expect(finalScore).toBe(initialScore + 50);
 
-			// Verify game vars are also updated
-			const gameVars = home.scene.game.vars as GameVars;
-			expect(gameVars.gameState.score).toBe(finalScore);
+			// Verify GameContext is also updated
+			const gameContext = (home as any).gameContext as GameContext;
+			expect(gameContext.currentPlayer.points).toBe(finalScore);
 		});
 
 		it("should handle completing all tasks", async () => {
@@ -468,8 +470,8 @@ describe("HomeE", () => {
 			expect(findTaskExecuteButton("shopping")).toBeNull();
 			expect(findTaskExecuteButton("sns")).toBeNull();
 
-			// Verify final score (500 + 50 + 100 + 100 = 750)
-			expect(home.getScore()).toBe(750);
+			// Verify final score (0 + 50 + 100 + 100 = 250)
+			expect(home.getScore()).toBe(250);
 		});
 
 		it("should handle profile task with screen switching behavior", async () => {
@@ -576,7 +578,7 @@ describe("HomeE", () => {
 		 * Helper function to get the current banner ID by checking which click button exists
 		 */
 		const getCurrentBannerId = (): string | null => {
-			const bannerIds = ["sale_campaign", "new_feature", "point_bonus"];
+			const bannerIds = ["welcome_ad", "shopping_recommend", "sale_notification", "sns_recommend"];
 			for (const bannerId of bannerIds) {
 				if (findBannerClickButton(bannerId)) {
 					return bannerId;
@@ -594,89 +596,93 @@ describe("HomeE", () => {
 			button!.send();
 
 			// Wait for any animations to complete
-			await gameContext.advance(500);
+			await gameContext.advance(800);
 		};
 
-		it("should show the highest priority banner initially (sale_campaign)", () => {
-			// The highest priority banner should be sale_campaign (priority 1)
+		it("should show the highest priority banner initially (welcome_ad)", () => {
+			// The highest priority banner should be welcome_ad (priority 1)
 			const currentBannerId = getCurrentBannerId();
-			expect(currentBannerId).toBe("sale_campaign");
+			expect(currentBannerId).toBe("welcome_ad");
 
 			// Verify the click button exists
-			const clickButton = findBannerClickButton("sale_campaign");
+			const clickButton = findBannerClickButton("welcome_ad");
 			expect(clickButton).not.toBeNull();
 		});
 
 		it("should switch to next banner when current banner is clicked", async () => {
-			// Initially should show sale_campaign
-			expect(getCurrentBannerId()).toBe("sale_campaign");
+			// Initially should show welcome_ad
+			expect(getCurrentBannerId()).toBe("welcome_ad");
 
-			// Click the sale_campaign banner
-			await clickBanner("sale_campaign");
+			// Click the welcome_ad banner
+			await clickBanner("welcome_ad");
 
-			// Should switch to new_feature (priority 2)
-			expect(getCurrentBannerId()).toBe("new_feature");
+			// Should switch to shopping_recommend (priority 2)
+			expect(getCurrentBannerId()).toBe("shopping_recommend");
 		});
 
 		it("should cycle through all banners in priority order", async () => {
-			// Start with sale_campaign (priority 1)
-			expect(getCurrentBannerId()).toBe("sale_campaign");
+			// Start with welcome_ad (priority 1)
+			expect(getCurrentBannerId()).toBe("welcome_ad");
 
-			// Click to switch to new_feature (priority 2)
-			await clickBanner("sale_campaign");
-			expect(getCurrentBannerId()).toBe("new_feature");
+			// Click to switch to shopping_recommend (priority 2)
+			await clickBanner("welcome_ad");
+			expect(getCurrentBannerId()).toBe("shopping_recommend");
 
-			// Click to switch to point_bonus (priority 3)
-			await clickBanner("new_feature");
-			expect(getCurrentBannerId()).toBe("point_bonus");
+			// Click to switch to sale_notification (priority 3)
+			await clickBanner("shopping_recommend");
+			expect(getCurrentBannerId()).toBe("sale_notification");
 
-			// Click to cycle back to sale_campaign (priority 1)
-			await clickBanner("point_bonus");
-			expect(getCurrentBannerId()).toBe("sale_campaign");
+			// Click to switch to sns_recommend (priority 4)
+			await clickBanner("sale_notification");
+			expect(getCurrentBannerId()).toBe("sns_recommend");
+
+			// Click to cycle back to welcome_ad (priority 1)
+			await clickBanner("sns_recommend");
+			expect(getCurrentBannerId()).toBe("welcome_ad");
 		});
 
-		it("should award points when sale_campaign banner is clicked", async () => {
+		it("should award points when welcome_ad banner is clicked", async () => {
 			// Get initial score
 			const initialScore = home.getScore();
 
-			// Ensure we're on sale_campaign banner
-			expect(getCurrentBannerId()).toBe("sale_campaign");
+			// Ensure we're on welcome_ad banner
+			expect(getCurrentBannerId()).toBe("welcome_ad");
 
-			// Click the sale_campaign banner (should award 50 points)
-			await clickBanner("sale_campaign");
+			// Click the welcome_ad banner (should award 100 points)
+			await clickBanner("welcome_ad");
 
-			// Verify score increased by 50
-			expect(home.getScore()).toBe(initialScore + 50);
+			// Verify score increased by 100
+			expect(home.getScore()).toBe(initialScore + 100);
 		});
 
-		it("should award points when point_bonus banner is clicked", async () => {
-			// Navigate to point_bonus banner
-			await clickBanner("sale_campaign"); // Switch to new_feature
-			await clickBanner("new_feature"); // Switch to point_bonus
+		it("should award points when sale_notification banner is clicked", async () => {
+			// Navigate to sale_notification banner
+			await clickBanner("welcome_ad"); // Switch to shopping_recommend
+			await clickBanner("shopping_recommend"); // Switch to sale_notification
 
-			expect(getCurrentBannerId()).toBe("point_bonus");
+			expect(getCurrentBannerId()).toBe("sale_notification");
 
 			// Get current score
 			const currentScore = home.getScore();
 
-			// Click the point_bonus banner (should award 25 points)
-			await clickBanner("point_bonus");
+			// Click the sale_notification banner (should award 100 points)
+			await clickBanner("sale_notification");
 
-			// Verify score increased by 25
-			expect(home.getScore()).toBe(currentScore + 25);
+			// Verify score increased by 100
+			expect(home.getScore()).toBe(currentScore + 100);
 		});
 
 		it("should allow switching to specific banner by ID", () => {
-			// Start with sale_campaign
-			expect(getCurrentBannerId()).toBe("sale_campaign");
+			// Start with welcome_ad
+			expect(getCurrentBannerId()).toBe("welcome_ad");
 
-			// Switch directly to point_bonus
-			home.switchToBanner("point_bonus");
-			expect(getCurrentBannerId()).toBe("point_bonus");
+			// Switch directly to sale_notification
+			home.switchToBanner("sale_notification");
+			expect(getCurrentBannerId()).toBe("sale_notification");
 
-			// Switch directly to new_feature
-			home.switchToBanner("new_feature");
-			expect(getCurrentBannerId()).toBe("new_feature");
+			// Switch directly to shopping_recommend
+			home.switchToBanner("shopping_recommend");
+			expect(getCurrentBannerId()).toBe("shopping_recommend");
 		});
 
 		it("should handle invalid banner ID gracefully", () => {
@@ -691,7 +697,7 @@ describe("HomeE", () => {
 
 		it("should only show one banner at a time", () => {
 			// Count how many banner click buttons exist
-			const bannerIds = ["sale_campaign", "new_feature", "point_bonus"];
+			const bannerIds = ["welcome_ad", "shopping_recommend", "sale_notification", "sns_recommend"];
 			let visibleBanners = 0;
 
 			bannerIds.forEach((bannerId) => {
