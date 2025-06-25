@@ -1,6 +1,6 @@
 
 import { NotificationData } from "./notificationData";
-import { PlayerData } from "./playerData";
+import { PlayerData, createPlayerData } from "./playerData";
 
 /**
  * Game phase enumeration representing different stages of the game
@@ -68,14 +68,10 @@ export class GameContext {
 	 * @returns GameContext instance for testing
 	 */
 	static createForTesting(currentTime: number = 0): GameContext {
-		const testPlayer: PlayerData = {
-			profile: { name: "テストプレイヤー", avatar: "😀" },
-			points: 500,
-			ownedItems: [],
-			taskProgress: new Map(),
-			joinedAt: currentTime,
-			lastActiveAt: currentTime
-		};
+		const testPlayer: PlayerData = createPlayerData(
+			{ name: "テストプレイヤー", avatar: "😀" },
+			currentTime
+		);
 
 		const testGameMode: GameMode = {
 			mode: "ranking",

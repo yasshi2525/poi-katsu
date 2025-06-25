@@ -25,6 +25,8 @@ export interface TaskProgress {
  * Centralizes player state according to 1.1 データモデル設計
  */
 export interface PlayerData {
+	/** Unique player identifier (safe for button names) */
+	id: string;
 	/** Player profile information (name, avatar) */
 	profile: PlayerProfile;
 	/** Current point balance */
@@ -37,6 +39,8 @@ export interface PlayerData {
 	joinedAt: number;
 	/** Last time the player was active - timestamp in milliseconds */
 	lastActiveAt: number;
+	/** Number of items owned before settlement (for ranking display) */
+	preSettlementItemCount?: number;
 }
 
 /**
@@ -46,7 +50,10 @@ export interface PlayerData {
  * @returns New PlayerData instance
  */
 export function createPlayerData(profile: PlayerProfile, currentTime: number = 0): PlayerData {
+	// Generate a safe, unique ID based on profile name with timestamp
+	const safeId = `player_${profile.name.replace(/[^a-zA-Z0-9]/g, "_")}_${currentTime}`;
 	return {
+		id: safeId,
 		profile: profile,
 		points: 500, // Initial points as per game specification
 		ownedItems: [],

@@ -65,6 +65,8 @@ export class ModalE<T> extends g.E {
 			y: options.scene.game.height / 2,
 			anchorX: 0.5,
 			anchorY: 0.5,
+			touchable: true,
+			local: true,
 		});
 		this.append(this.content);
 

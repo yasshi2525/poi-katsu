@@ -125,6 +125,9 @@ export class ShopE extends g.E {
 
 		// Listen for UI update events from MarketManager
 		this.setupUIUpdateListener();
+
+		// Immediately update price labels after setup to ensure current prices are displayed
+		this.updateAllPriceLabels();
 	}
 
 	/**
@@ -132,6 +135,13 @@ export class ShopE extends g.E {
 	 */
 	refreshForTimelineReveal(): void {
 		this.refreshShopDisplay();
+	}
+
+	/**
+	 * Force closes all modals when time reaches zero
+	 */
+	forceCloseAllModals(): void {
+		this.closeModal();
 	}
 
 	/**
@@ -457,6 +467,11 @@ export class ShopE extends g.E {
 		// Validate parsed price
 		if (isNaN(dynamicPrice) || dynamicPrice <= 0) {
 			console.error(`Invalid price in button args: ${priceStr}`);
+			// Reactivate button for invalid data cases
+			const purchaseButton = this.purchaseButtons.get(itemId);
+			if (purchaseButton) {
+				purchaseButton.reactivate();
+			}
 			return;
 		}
 
@@ -469,6 +484,11 @@ export class ShopE extends g.E {
 		const item = this.itemManager.getItem(itemId);
 		if (!item) {
 			console.error(`Item not found: ${itemId}`);
+			// Reactivate button for invalid item ID
+			const purchaseButton = this.purchaseButtons.get(itemId);
+			if (purchaseButton) {
+				purchaseButton.reactivate();
+			}
 			return;
 		}
 
@@ -477,11 +497,21 @@ export class ShopE extends g.E {
 			const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
 			const maxValidPrice = item.purchasePrice * 3;
 			console.error(`Dynamic price ${dynamicPrice} out of valid range [${minValidPrice}, ${maxValidPrice}] for item ${itemId}`);
+			// Reactivate button for invalid price range
+			const purchaseButton = this.purchaseButtons.get(item.id);
+			if (purchaseButton) {
+				purchaseButton.reactivate();
+			}
 			return;
 		}
 
 		// Check if already owned
 		if (this.itemManager.ownsItem(itemId)) {
+			// Reactivate the purchase button for retry
+			const purchaseButton = this.purchaseButtons.get(item.id);
+			if (purchaseButton) {
+				purchaseButton.reactivate();
+			}
 			this.showPurchaseModal("すでに所持しているアイテムです。", false);
 			return;
 		}
@@ -489,6 +519,11 @@ export class ShopE extends g.E {
 		// Check if player has enough points
 		const currentPoints = this.onCheckPoints();
 		if (currentPoints < dynamicPrice) {
+			// Reactivate the purchase button for retry
+			const purchaseButton = this.purchaseButtons.get(item.id);
+			if (purchaseButton) {
+				purchaseButton.reactivate();
+			}
 			this.showPurchaseModal(`ポイントが不足しています。\n必要: ${dynamicPrice}pt\n所持: ${currentPoints}pt`, false);
 			return;
 		}

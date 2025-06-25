@@ -2,7 +2,7 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { AffiliatePurchaseMessage } from "../data/affiliateMessages";
 import { ItemData } from "../data/itemData";
-import { SharedPostData, incrementPurchaseCount } from "../data/sharedPostData";
+import { SharedPostData } from "../data/sharedPostData";
 import { ItemManager } from "../manager/itemManager";
 import { LabelButtonE } from "./labelButtonE";
 import { ModalE } from "./modalE";
@@ -429,8 +429,8 @@ export class TimelineE extends g.E {
 			this.onItemPurchased(sharedPost.item);
 		}
 
-		// Increment purchase count for the shared post
-		incrementPurchaseCount(sharedPost);
+		// Note: Don't increment purchase count locally here as it will be updated via broadcast message
+		// This prevents double-counting when the buyer receives their own broadcast
 
 		// Calculate affiliate reward using configured rate
 		const affiliateReward = Math.floor(sharedPost.sharedPrice * AFFILIATE_CONFIG.REWARD_RATE);
@@ -568,25 +568,24 @@ export class TimelineE extends g.E {
 
 	/**
 	 * Updates purchase count display for a specific post without recreating
-	 * Only updates display for self-posted items to show purchase count
+	 * Shows purchase count for all posts to encourage affiliate activity
 	 */
 	private updatePurchaseCount(postId: string): void {
 		// Find the shared post
 		const sharedPost = this.sharedPosts.find(post => post.id === postId);
 		if (!sharedPost) return;
 
-		// Only update purchase count display for self-posted items
-		const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
-		if (!isSelfPosted) return;
-
 		// Find the corresponding timeline item
 		const postIndex = this.sharedPosts.indexOf(sharedPost);
 		if (postIndex >= 0 && postIndex < this.timelineItems.length) {
 			const postItem = this.timelineItems[postIndex];
-			// Update action text to reflect new purchase count for self-posted items only
+			// Update action text to reflect new purchase count for all posts
 			const actionTextLabel = postItem.children && postItem.children[3]; // Assuming action text is forth child
 			if (actionTextLabel && actionTextLabel instanceof g.Label) {
-				const newText = `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (自分の投稿・${sharedPost.purchaseCount}人が購入)`;
+				const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
+				const newText = isSelfPosted
+					? `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (自分の投稿・${sharedPost.purchaseCount}人が購入)`
+					: `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (${sharedPost.purchaseCount}人が購入)`;
 				actionTextLabel.text = newText;
 				actionTextLabel.invalidate();
 			}

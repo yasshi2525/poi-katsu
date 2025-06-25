@@ -1,3 +1,4 @@
+import { GameContext } from "../../src/data/gameContext";
 import { HeaderE } from "../../src/entity/headerE";
 import { HomeE } from "../../src/entity/homeE";
 import { LabelButtonE } from "../../src/entity/labelButtonE";
@@ -33,12 +34,19 @@ describe("HomeE", () => {
 		});
 		scene.append(header);
 
+		// Create GameContext for testing
+		const gameContext = GameContext.createForTesting(scene.game.age);
+
 		// Create HomeE instance using global scene
 		home = new HomeE({
 			scene: scene,
 			width: scene.game.width,
 			height: scene.game.height,
 			header: header,
+			gameContext: gameContext,
+			marketManager: marketManager,
+			updateCurrentPlayerScore: (score: number) => { /* Mock function */ },
+			transitionToRanking: () => { /* Mock function */ },
 		});
 		scene.append(home);
 	});

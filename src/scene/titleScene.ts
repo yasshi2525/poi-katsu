@@ -38,6 +38,10 @@ export class TitleScene extends BaseScene {
 		});
 	}
 
+	protected override onSwipeOut(): void {
+		// nothing to do here
+	}
+
 	protected override onSwipeIn(): void {
 		new Timeline(this).create(this)
 			.wait(1000)

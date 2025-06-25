@@ -106,9 +106,9 @@ export class TaskManager {
 	/**
 	 * Executes a task based on its ID
 	 * @param taskData The task data to execute
-	 * @returns Promise with execution result
+	 * @returns Execution result
 	 */
-	async executeTask(taskData: TaskData): Promise<TaskExecutionResult> {
+	executeTask(taskData: TaskData): TaskExecutionResult {
 		switch (taskData.id) {
 			case "profile":
 				return this.executeProfileTask(taskData);

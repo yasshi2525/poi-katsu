@@ -42,6 +42,10 @@ export interface AppListParameterObject extends g.EParameterObject {
 	height: number;
 	/** Callback when shop app is clicked */
 	onShopClick?: () => void;
+	/** Callback when settlement app is clicked */
+	onSettlementClick?: () => void;
+	/** Callback when settlement app is triggered automatically */
+	onAutomaticSettlementClick?: () => void;
 }
 
 /**
@@ -50,9 +54,14 @@ export interface AppListParameterObject extends g.EParameterObject {
 export class AppListE extends g.E {
 	private readonly layout: LayoutConfig;
 	private readonly onShopClick?: () => void;
+	private readonly onSettlementClick?: () => void;
+	private readonly onAutomaticSettlementClick?: () => void;
 	private readonly apps: AppConfig[];
 	private shopAppElements: g.E[] = [];
+	private settlementAppElements: g.E[] = [];
 	private shopAppVisible: boolean = false;
+	private settlementAppVisible: boolean = false;
+	private settlementIsAutomatic: boolean = false;
 
 	/**
 	 * Creates a new AppList instance
@@ -62,6 +71,8 @@ export class AppListE extends g.E {
 		super(options);
 
 		this.onShopClick = options.onShopClick;
+		this.onSettlementClick = options.onSettlementClick;
+		this.onAutomaticSettlementClick = options.onAutomaticSettlementClick;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 
 		// Initialize apps configuration
@@ -70,6 +81,7 @@ export class AppListE extends g.E {
 			{ icon: "🛒", name: "通販", color: "#2980b9", visible: false }, // Initially hidden
 			{ icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1", visible: true },
 			{ icon: "🛍️", name: "フリマ", color: "#7f8c8d", visible: true },
+			{ icon: "💰", name: "精算", color: "#8e44ad", visible: false }, // Initially hidden
 		];
 
 		this.createLayout();
@@ -93,7 +105,7 @@ export class AppListE extends g.E {
 		const appX = this.layout.x + iconLayout.x + (1 * 180); // Shop is at index 1
 		const appY = this.layout.y + iconLayout.y;
 
-		this.createAppIcon(shopApp!, appX, appY, 1);
+		this.createAppIcon(shopApp!, appX, appY, 1, false); // false = not automatic
 
 		// Start with opacity 0 for fade-in effect
 		this.shopAppElements.forEach(element => {
@@ -145,6 +157,99 @@ export class AppListE extends g.E {
 					}
 				});
 		}
+	}
+
+	/**
+	 * Reveals the settlement app with animation
+	 * @param isAutomatic Whether this is an automatic reveal when time reaches zero
+	 */
+	revealSettlementApp(isAutomatic: boolean = false): void {
+		if (this.settlementAppVisible) return;
+
+		// Track if this is automatic settlement
+		this.settlementIsAutomatic = isAutomatic;
+
+		// Hide all other apps when settlement is revealed
+		this.hideAllAppsExceptSettlement();
+
+		// Update app visibility state
+		const settlementApp = this.apps.find(app => app.name === "精算");
+		if (settlementApp) {
+			settlementApp.visible = true;
+			this.settlementAppVisible = true;
+		}
+
+		// Create the settlement app icon (index 4 for settlement)
+		const iconLayout = this.layout.children!.icon;
+		const appX = this.layout.x + iconLayout.x + (4 * 180); // Settlement is at index 4
+		const appY = this.layout.y + iconLayout.y;
+
+		this.createAppIcon(settlementApp!, appX, appY, 4, isAutomatic);
+
+		// Start with opacity 0 for fade-in effect
+		this.settlementAppElements.forEach(element => {
+			element.opacity = 0;
+		});
+
+		// Fade in animation
+		const timeline = new Timeline(this.scene);
+		this.settlementAppElements.forEach(element => {
+			timeline.create(element)
+				.fadeIn(ANIMATION_CONFIG.SHOP_FADE_IN_DURATION)
+				.call(() => {
+					this.highlightSettlementApp();
+				});
+		});
+	}
+
+	/**
+	 * Highlights the settlement app with a special effect and automatically opens settlement
+	 */
+	highlightSettlementApp(): void {
+		if (!this.settlementAppVisible) return;
+
+		// Create highlighting animation with scale and opacity pulsing
+		const timeline = new Timeline(this.scene);
+		const settlementIconBg = this.settlementAppElements[0]; // First element is the icon background
+
+		if (settlementIconBg) {
+			// Pulse animation: scale up and fade out, then back to normal
+			timeline.create(settlementIconBg)
+				.to({
+					scaleX: ANIMATION_CONFIG.SHOP_HIGHLIGHT_SCALE,
+					scaleY: ANIMATION_CONFIG.SHOP_HIGHLIGHT_SCALE,
+					opacity: ANIMATION_CONFIG.SHOP_HIGHLIGHT_OPACITY
+				}, ANIMATION_CONFIG.SHOP_HIGHLIGHT_DURATION / 2)
+				.to({
+					scaleX: 1,
+					scaleY: 1,
+					opacity: 1
+				}, ANIMATION_CONFIG.SHOP_HIGHLIGHT_DURATION / 2)
+				.call(() => {
+					// Automatically trigger settlement click after highlighting animation ends
+					if (this.settlementIsAutomatic && this.onAutomaticSettlementClick) {
+						this.onAutomaticSettlementClick();
+					} else if (this.onSettlementClick) {
+						this.onSettlementClick();
+					}
+				});
+		}
+	}
+
+	/**
+	 * Hides all app entities except the settlement app
+	 */
+	private hideAllAppsExceptSettlement(): void {
+		// Update app visibility state for non-settlement apps
+		this.apps.forEach(app => {
+			if (app.name !== "精算") {
+				app.visible = false;
+			}
+		});
+
+		// Note: Since app visibility only affects initial creation,
+		// this will prevent other apps from being shown during settlement.
+		// The visual hiding happens through the fact that settlement takes over the full screen.
 	}
 
 	/**
@@ -220,15 +325,16 @@ export class AppListE extends g.E {
 			if (app.visible) {
 				const appX = this.layout.x + iconLayout.x + (index * 180);
 				const appY = this.layout.y + iconLayout.y;
-				this.createAppIcon(app, appX, appY, index);
+				this.createAppIcon(app, appX, appY, index, false); // false = not automatic
 			}
 		});
 	}
 
 	/**
 	 * Creates a single app icon
+	 * @param isAutomatic Whether this is being created during automatic settlement reveal
 	 */
-	private createAppIcon(app: AppConfig, x: number, y: number, appIndex: number): void {
+	private createAppIcon(app: AppConfig, x: number, y: number, appIndex: number, isAutomatic: boolean = false): void {
 		const iconChildrenLayout = this.layout.children!.icon.children!;
 		const backgroundLayout = iconChildrenLayout.background;
 		const iconLabelLayout = iconChildrenLayout.iconLabel;
@@ -262,6 +368,20 @@ export class AppListE extends g.E {
 					this.onShopClick();
 				}
 			});
+		}
+
+		// Add click handler for settlement app
+		if (app.name === "精算") {
+			// Disable touchability during automatic settlement to avoid unintentional behavior
+			if (isAutomatic) {
+				iconBg.touchable = false;
+			} else {
+				iconBg.onPointDown.add(() => {
+					if (this.onSettlementClick) {
+						this.onSettlementClick();
+					}
+				});
+			}
 		}
 
 		appContainer.append(iconBg);
@@ -329,6 +449,16 @@ export class AppListE extends g.E {
 				// Add badge elements if they exist
 				this.shopAppElements.push(appContainer.children![appContainer.children!.length - 2]); // badgeBg
 				this.shopAppElements.push(appContainer.children![appContainer.children!.length - 1]); // badgeLabel before nameLabel
+			}
+		}
+
+		// Store settlement app elements for later manipulation
+		if (app.name === "精算") {
+			this.settlementAppElements = [iconBg, iconLabel, nameLabel];
+			if (app.badge) {
+				// Add badge elements if they exist
+				this.settlementAppElements.push(appContainer.children![appContainer.children!.length - 2]); // badgeBg
+				this.settlementAppElements.push(appContainer.children![appContainer.children!.length - 1]); // badgeLabel before nameLabel
 			}
 		}
 

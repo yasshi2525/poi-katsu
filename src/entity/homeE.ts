@@ -1,9 +1,11 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AffiliateBroadcastMessage } from "../data/affiliateMessages";
+import { GameContext } from "../data/gameContext";
 import { ItemData } from "../data/itemData";
 import { createSharedPost, SharedPostData } from "../data/sharedPostData";
 import { TaskData } from "../data/taskData";
 import { ItemManager } from "../manager/itemManager";
+import { MarketManager } from "../manager/marketManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
 import { ScoreBroadcaster } from "../model/scoreBroadcaster";
 import { AdBannerE, BannerData } from "./adBannerE";
@@ -13,6 +15,7 @@ import { ItemListE } from "./itemListE";
 import { ModalE } from "./modalE";
 import { PointDisplayE } from "./pointDisplayE";
 import { ProfileEditorE } from "./profileEditorE";
+import { SettlementE } from "./settlementE";
 import { ShopE } from "./shopE";
 import { TaskListE } from "./taskListE";
 import { TimelineE } from "./timelineE";
@@ -44,6 +47,14 @@ export interface HomeParameterObject extends g.EParameterObject {
 	height: number;
 	/** Header reference from scene level */
 	header: HeaderE;
+	/** Game context for centralized state management */
+	gameContext: GameContext;
+	/** Market manager instance for price management */
+	marketManager: MarketManager;
+	/** Function to update current player score in MainScene */
+	updateCurrentPlayerScore: (score: number) => void;
+	/** Function to transition to ranking scene */
+	transitionToRanking: () => void;
 }
 
 /**
@@ -62,12 +73,19 @@ export class HomeE extends g.E {
 	private itemList!: ItemListE;
 	private profileEditor?: ProfileEditorE;
 	private shop?: ShopE;
+	private settlement?: SettlementE;
 	private scoreBroadcaster?: ScoreBroadcaster;
 	private currentModal?: ModalE<string>;
 
 	// Management systems
 	private taskManager!: TaskManager;
 	private itemManager!: ItemManager;
+	private gameContext!: GameContext;
+	private marketManager!: MarketManager;
+
+	// MainScene function callbacks
+	private updateCurrentPlayerScore!: (score: number) => void;
+	private transitionToRanking!: () => void;
 
 	// Screen state
 	private readonly screenWidth: number;
@@ -75,6 +93,7 @@ export class HomeE extends g.E {
 	private isProfileEditorVisible: boolean = false;
 	private isTimelineVisible: boolean = false;
 	private isShopVisible: boolean = false;
+	private isSettlementVisible: boolean = false;
 
 	// Affiliate system
 	private postIdCounter: number = 0;
@@ -131,6 +150,10 @@ export class HomeE extends g.E {
 		this.header = options.header;
 		this.screenWidth = options.width;
 		this.screenHeight = options.height;
+		this.gameContext = options.gameContext;
+		this.marketManager = options.marketManager;
+		this.updateCurrentPlayerScore = options.updateCurrentPlayerScore;
+		this.transitionToRanking = options.transitionToRanking;
 
 		// Initialize game variables
 		const gameVars = options.scene.game.vars as GameVars;
@@ -167,6 +190,9 @@ export class HomeE extends g.E {
 
 		// Update header display
 		this.header.setScore(newScore);
+
+		// Update score in GameContext for settlement consistency
+		this.updateCurrentPlayerScore(newScore);
 
 		// Broadcast score to other participants
 		if (this.scoreBroadcaster) {
@@ -251,6 +277,57 @@ export class HomeE extends g.E {
 	}
 
 	/**
+	 * Returns to home screen if currently viewing other apps
+	 */
+	returnToHomeIfNeeded(): void {
+		// If viewing shop, switch back to home
+		if (this.isShopVisible) {
+			this.switchBackFromShop();
+		}
+
+		// If viewing settlement, switch back to home
+		if (this.isSettlementVisible) {
+			this.switchBackFromSettlement();
+		}
+
+		// Ensure all home sections are visible and positioned correctly
+		this.getHomeSections().forEach(section => {
+			section.x = section.x - (section.x % this.screenWidth); // Reset to home position
+		});
+	}
+
+	/**
+	 * Triggers automatic settlement when time reaches zero
+	 */
+	triggerAutomaticSettlement(): void {
+		// First reveal the settlement app if not already visible (with automatic flag)
+		if (!this.isSettlementVisible) {
+			this.appList.revealSettlementApp(true); // true = automatic settlement
+		}
+
+		// The settlement app is made non-touchable during auto-reveal to avoid unintentional behavior
+		// The highlighting effect will automatically open the settlement app
+	}
+
+	/**
+	 * Force closes all modals across the home screen when time reaches zero
+	 */
+	forceCloseAllModals(): void {
+		// Close any current modal
+		this.closeModal();
+
+		// Close modals in shop if visible
+		if (this.shop && this.isShopVisible) {
+			this.shop.forceCloseAllModals();
+		}
+
+		// Close modals in settlement if visible
+		if (this.settlement && this.isSettlementVisible) {
+			this.settlement.forceCloseAllModals();
+		}
+	}
+
+	/**
 	 * Initializes ItemManager
 	 */
 	private initializeItemManager(): void {
@@ -283,7 +360,10 @@ export class HomeE extends g.E {
 					this.showAchievementEffect(task);
 				}
 			},
-			onTaskComplete: (taskId: string) => this.taskList.completeTaskExternal(taskId)
+			onTaskComplete: (taskId: string) => {
+				this.taskList.completeTaskExternal(taskId);
+				this.recordTaskCompletion(taskId);
+			}
 		};
 
 		this.taskManager = new TaskManager(context);
@@ -345,6 +425,8 @@ export class HomeE extends g.E {
 			width: width,
 			height: height - 140, // Reduced by item list height
 			onShopClick: () => this.switchToShop(),
+			onSettlementClick: () => this.switchToSettlement(false), // false = manual settlement
+			onAutomaticSettlementClick: () => this.switchToSettlement(true), // true = automatic settlement
 			y: 140 // Below header + item list
 		});
 		this.append(this.appList);
@@ -374,9 +456,9 @@ export class HomeE extends g.E {
 	 * Delegates to TaskManager for centralized task logic
 	 * @param taskData The task data for the executed task
 	 */
-	private async onTaskExecute(taskData: TaskData): Promise<void> {
+	private onTaskExecute(taskData: TaskData): void {
 		try {
-			const result = await this.taskManager.executeTask(taskData);
+			const result = this.taskManager.executeTask(taskData);
 			if (!result.success) {
 				console.warn(`Task execution failed: ${result.message}`);
 			}
@@ -472,6 +554,24 @@ export class HomeE extends g.E {
 	private updateHeaderWithCurrentProfile(): void {
 		const gameVars = this.scene.game.vars as GameVars;
 		this.header.setPlayerProfile(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
+
+		// Also update the GameContext with the new profile for ranking consistency
+		this.updateCurrentPlayerProfileInGameContext(gameVars.playerProfile.name, gameVars.playerProfile.avatar);
+	}
+
+	/**
+	 * Updates current player profile in GameContext
+	 */
+	private updateCurrentPlayerProfileInGameContext(name: string, avatar: string): void {
+		if (!this.gameContext) return;
+
+		const currentPlayer = this.gameContext.currentPlayer;
+		const updatedPlayer = {
+			...currentPlayer,
+			profile: { name, avatar },
+			lastActiveAt: this.scene.game.age
+		};
+		this.gameContext.updateCurrentPlayer(updatedPlayer);
 	}
 
 
@@ -647,10 +747,9 @@ export class HomeE extends g.E {
 
 		// Create or reuse shop positioned off-screen to the right
 		if (!this.shop) {
-			// Get MarketManager from MainScene
-			const marketManager = (this.scene as any).getMarketManager();
-			if (!marketManager) {
-				console.error("MarketManager not found in MainScene");
+			// Use MarketManager from constructor
+			if (!this.marketManager) {
+				console.error("MarketManager not found");
 				return;
 			}
 
@@ -661,7 +760,7 @@ export class HomeE extends g.E {
 				x: this.screenWidth, // Start off-screen to the right
 				y: 0,
 				itemManager: this.itemManager,
-				marketManager: marketManager,
+				marketManager: this.marketManager,
 				onCheckPoints: () => this.getScore(),
 				onDeductPoints: (amount: number) => this.addScore(-amount),
 				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
@@ -715,6 +814,110 @@ export class HomeE extends g.E {
 			timeline.create(section)
 				.to({ x: section.x + ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
 		});
+	}
+
+	/**
+	 * Switches from HomeE to SettlementE with swipe animation
+	 * @param isAutomatic Whether this is automatic settlement triggered by timer
+	 */
+	private switchToSettlement(isAutomatic: boolean = false): void {
+		if (this.isSettlementVisible) return;
+
+		// Create or reuse settlement positioned off-screen to the right
+		if (!this.settlement) {
+			this.settlement = new SettlementE({
+				scene: this.scene,
+				gameContext: this.gameContext,
+				itemManager: this.itemManager,
+				transitionToRanking: this.transitionToRanking
+			});
+			this.settlement.x = this.screenWidth; // Start off-screen to the right
+			this.settlement.y = 0;
+			this.append(this.settlement);
+		} else {
+			// Reposition existing settlement off-screen for animation
+			this.settlement.x = this.screenWidth;
+		}
+
+		// Set automatic mode if this is automatic settlement
+		this.settlement.setAutomaticMode(isAutomatic);
+
+		this.isSettlementVisible = true;
+
+		// Create swipe animation: HomeE slides left, SettlementE slides in from right
+		const timeline = new Timeline(this.scene);
+
+		// Animate HomeE sections sliding out to the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x - ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+
+		// Animate SettlementE sliding in from the right
+		timeline.create(this.settlement)
+			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+	}
+
+	/**
+	 * Switches back from SettlementE to HomeE with swipe animation
+	 */
+	private switchBackFromSettlement(): void {
+		if (!this.isSettlementVisible || !this.settlement) return;
+
+		// Create swipe animation: SettlementE slides right, HomeE slides in from left
+		const timeline = new Timeline(this.scene);
+
+		// Animate SettlementE sliding out to the right
+		timeline.create(this.settlement)
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
+			.call(() => {
+				// Don't destroy settlement - keep it for reuse, just mark as not visible
+				this.isSettlementVisible = false;
+			});
+
+		// Animate HomeE sections sliding back in from the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x + ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
+	}
+
+	/**
+	 * Records task completion in GameContext and broadcasts to other players
+	 * @param taskId The ID of the completed task
+	 */
+	private recordTaskCompletion(taskId: string): void {
+		// Update task progress in GameContext
+		if (!this.gameContext) return;
+
+		const currentPlayer = this.gameContext.currentPlayer;
+		const updatedTaskProgress = new Map(currentPlayer.taskProgress);
+		updatedTaskProgress.set(taskId, {
+			taskId: taskId,
+			completed: true,
+			completedAt: this.scene.game.age
+		});
+
+		const updatedPlayer = {
+			...currentPlayer,
+			taskProgress: updatedTaskProgress,
+			lastActiveAt: this.scene.game.age
+		};
+		this.gameContext.updateCurrentPlayer(updatedPlayer);
+
+		// Broadcast task completion to other players
+		const gameVars = this.scene.game.vars as GameVars;
+		if (gameVars.mode === "multi" && this.scene.game.selfId) {
+			const message = {
+				type: "taskCompletion",
+				taskData: {
+					playerId: this.scene.game.selfId,
+					taskId: taskId,
+					completedAt: this.scene.game.age
+				}
+			};
+			this.scene.game.raiseEvent(new g.MessageEvent(message));
+		}
 	}
 
 	/**
@@ -890,7 +1093,7 @@ export class HomeE extends g.E {
 	/**
 	 * Handles SNS connection request from disabled share button
 	 */
-	private async handleSnsConnectionRequest(): Promise<void> {
+	private handleSnsConnectionRequest(): void {
 		// First, go back to home if we're in shop
 		if (this.isShopVisible) {
 			this.switchBackFromShop();
@@ -900,7 +1103,7 @@ export class HomeE extends g.E {
 		const snsTask = this.taskManager.getTask("sns");
 		if (snsTask) {
 			try {
-				const result = await this.taskManager.executeTask(snsTask);
+				const result = this.taskManager.executeTask(snsTask);
 				if (!result.success) {
 					console.warn(`SNS task execution failed: ${result.message}`);
 				}

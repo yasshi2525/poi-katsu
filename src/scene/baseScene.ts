@@ -28,6 +28,7 @@ export abstract class BaseScene extends g.Scene {
 
 	swipeOut(next: BaseScene): void {
 		this.swipe("out", () => {
+			this.onSwipeOut();
 			this.game.pushScene(next);
 		});
 	}
@@ -36,6 +37,7 @@ export abstract class BaseScene extends g.Scene {
 		this.swipe("in", () => this.onSwipeIn());
 	}
 
+	protected abstract onSwipeOut(): void;
 	protected abstract onSwipeIn(): void;
 
 	private swipe(typ: "in" | "out", onComplete?: g.HandlerFunction<void>): void {

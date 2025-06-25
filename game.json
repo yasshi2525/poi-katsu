@@ -225,6 +225,41 @@
 			"type": "script",
 			"path": "script/manager/marketManager.js",
 			"global": true
+		},
+		"itemConversionE": {
+			"type": "script",
+			"path": "script/entity/itemConversionE.js",
+			"global": true
+		},
+		"playerDetailE": {
+			"type": "script",
+			"path": "script/entity/playerDetailE.js",
+			"global": true
+		},
+		"playerRankingE": {
+			"type": "script",
+			"path": "script/entity/playerRankingE.js",
+			"global": true
+		},
+		"scoreBreakdownE": {
+			"type": "script",
+			"path": "script/entity/scoreBreakdownE.js",
+			"global": true
+		},
+		"settlementE": {
+			"type": "script",
+			"path": "script/entity/settlementE.js",
+			"global": true
+		},
+		"settlementResultE": {
+			"type": "script",
+			"path": "script/entity/settlementResultE.js",
+			"global": true
+		},
+		"rankingScene": {
+			"type": "script",
+			"path": "script/scene/rankingScene.js",
+			"global": true
 		}
 	},
 	"environment": {
