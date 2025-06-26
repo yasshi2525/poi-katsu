@@ -6,7 +6,7 @@ import { PointDisplayE } from "./pointDisplayE";
 export interface HeaderParameterObject extends g.EParameterObject {
 	/** Screen width */
 	width: number;
-	/** Screen height */
+	/** Header height (should match PointDisplayE height) */
 	height: number;
 	/** Initial score */
 	score: number;
@@ -35,7 +35,7 @@ export class HeaderE extends g.E {
 		this.pointDisplay = new PointDisplayE({
 			scene: options.scene,
 			width: options.width,
-			height: 80, // Header height
+			height: options.height, // Use header height from options
 			score: options.score,
 			remainingSec: options.remainingSec,
 			x: 0,

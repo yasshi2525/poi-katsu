@@ -74,7 +74,7 @@ export class ItemListE extends g.E {
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
 			x: 0,
-			y: 0, // Position at top of component
+			y: 69, // Below header (header height = 69)
 			width: screenWidth,
 			height: screenHeight,
 			children: {

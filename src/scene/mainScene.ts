@@ -15,6 +15,13 @@ const config = {
 	fadeIn: { duration: 500 },
 };
 
+/**
+ * Settlement timing configuration
+ */
+const SETTLEMENT_CONFIG = {
+	FIXED_SETTLEMENT_DURATION: 6000, // Fixed 6 seconds for settlement before ranking
+} as const;
+
 export class MainScene extends BaseScene {
 	private header?: HeaderE;
 	private home?: HomeE;
@@ -23,6 +30,7 @@ export class MainScene extends BaseScene {
 	private gameContext: GameContext;
 	private interactionBlocker?: g.E;
 	private pendingSharedPosts: SharedPostData[] = []; // Store posts received before HomeE is created
+	private settlementTimer?: g.TimerIdentifier; // Timer ID for fixed settlement duration
 
 	constructor(param: g.SceneParameterObject & { mode: "multi" | "ranking"; totalTimeLimit: number }) {
 		super({
@@ -79,32 +87,6 @@ export class MainScene extends BaseScene {
 				// Decrement remaining frames and if it reaches zero, remove this handler
 				!this.gameContext.decrementRemainingFrame()
 			);
-			this.append(new g.FilledRect({
-				scene: this,
-				cssColor: "#4A90E2",
-				width: this.game.width * 0.8,
-				height: this.game.height * 0.8,
-				x: this.game.width / 2,
-				y: this.game.height / 2,
-				anchorX: 0.5,
-				anchorY: 0.5
-			}));
-			this.append(new g.Label({
-				scene: this,
-				text: "Main Scene",
-				font: new g.DynamicFont({
-					game: this.game,
-					fontFamily: "sans-serif",
-					size: 50,
-					fontColor: "white",
-					strokeColor: "black",
-					strokeWidth: 5
-				}),
-				x: this.game.width / 2,
-				y: this.game.height / 2,
-				anchorX: 0.5,
-				anchorY: 0.5
-			}));
 		});
 	}
 
@@ -199,6 +181,12 @@ export class MainScene extends BaseScene {
 	 * Transitions to ranking scene when settlement is completed
 	 */
 	transitionToRanking(): void {
+		// Clear settlement timer if it exists (in case of manual transition)
+		if (this.settlementTimer) {
+			this.clearTimeout(this.settlementTimer);
+			this.settlementTimer = undefined;
+		}
+
 		const rankingScene = new RankingScene({
 			game: this.game,
 			gameContext: this.gameContext!,
@@ -287,6 +275,11 @@ export class MainScene extends BaseScene {
 
 		// Then trigger automatic settlement app reveal and opening
 		this.home.triggerAutomaticSettlement();
+
+		// Start fixed timer for ranking transition (independent of settlement animation completion)
+		this.settlementTimer = this.setTimeout(() => {
+			this.transitionToRanking();
+		}, SETTLEMENT_CONFIG.FIXED_SETTLEMENT_DURATION);
 	}
 
 
@@ -440,7 +433,7 @@ export class MainScene extends BaseScene {
 				this.header = new HeaderE({
 					scene: this,
 					width: this.game.width,
-					height: 80,
+					height: 69,
 					score: this.gameContext.currentPlayer.points,
 					remainingSec: this.gameContext.gameState.remainingTime
 				});

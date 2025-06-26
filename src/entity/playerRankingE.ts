@@ -85,7 +85,8 @@ export class PlayerRankingE extends g.E {
 	 * Shows ranking screen
 	 */
 	override show(): void {
-		this.opacity = 1;
+		// Don't immediately set opacity to 1 - this causes flashing
+		// Instead, animate the opacity smoothly to avoid visual artifacts
 		this.touchable = true;
 
 		// Start entrance animations only once
@@ -93,6 +94,11 @@ export class PlayerRankingE extends g.E {
 			this.startRankingAnimations();
 			this.animationsStarted = true;
 		}
+
+		// Smoothly fade in the entire ranking container
+		const timeline = new Timeline(this.scene);
+		timeline.create(this)
+			.to({ opacity: 1 }, RANKING_CONFIG.FADE_IN_DURATION);
 
 		super.show();
 	}

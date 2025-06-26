@@ -323,14 +323,22 @@ export class SettlementE extends g.E {
 		// Trigger game phase transition to ranking
 		this.gameContext.updateGamePhase(GamePhase.ENDED);
 
-		// Add delay before ranking scene transition for user to absorb the results
-		this.scene.setTimeout(() => {
-			// Refresh content to show empty state before transitioning
-			this.refreshContent();
+		// Only trigger ranking transition manually if not in automatic mode
+		// In automatic mode, MainScene handles ranking transition with fixed timer
+		if (!this.isAutomaticMode) {
+			// Add delay before ranking scene transition for user to absorb the results
+			this.scene.setTimeout(() => {
+				// Refresh content to show empty state before transitioning
+				this.refreshContent();
 
-			// Transition to ranking scene via callback
-			this.transitionToRanking();
-		}, SETTLEMENT_CONFIG.RANKING_TRANSITION_DELAY);
+				// Transition to ranking scene via callback
+				this.transitionToRanking();
+			}, SETTLEMENT_CONFIG.RANKING_TRANSITION_DELAY);
+		} else {
+			// In automatic mode, just refresh content but don't transition
+			// MainScene will handle the transition with its fixed timer
+			this.refreshContent();
+		}
 	}
 
 	/**

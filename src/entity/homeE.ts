@@ -388,38 +388,35 @@ export class HomeE extends g.E {
 	private createComponents(width: number, height: number): void {
 		// Note: header is created at scene level, not here
 
-		// Create ad banner (adjusted for header and item list)
+		// Create ad banner
 		this.adBanner = new AdBannerE({
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
-			height: height - 140, // Reduced by item list height
-			banners: this.banners,
-			y: 140 // Below header + item list
+			height: height,
+			banners: this.banners
 		});
 		this.append(this.adBanner);
 
-		// Create task list (adjusted for header and item list) - now using TaskManager's tasks
+		// Create task list - now using TaskManager's tasks
 		this.taskList = new TaskListE({
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
-			height: height - 140, // Reduced by item list height
+			height: height,
 			tasks: this.taskManager.getTasks(),
 			onTaskExecute: (taskData: TaskData) => this.onTaskExecute(taskData),
-			onTaskComplete: () => { /* Score addition is now handled by TaskManager */ },
-			y: 140 // Below header + item list
+			onTaskComplete: () => { /* Score addition is now handled by TaskManager */ }
 		});
 		this.append(this.taskList);
 
-		// Create timeline (adjusted for header and item list, initially hidden)
+		// Create timeline (initially hidden)
 		this.timeline = new TimelineE({
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
-			height: height - 140, // Reduced by item list height
+			height: height,
 			opacity: 0, // Initially hide timeline completely - will be shown after SNS task completion
-			y: 140, // Below header + item list
 			itemManager: this.itemManager,
 			onAffiliatePurchase: (postId: string, buyerName: string, rewardPoints: number) =>
 				this.handleAffiliatePurchase(postId, buyerName, rewardPoints),
@@ -434,25 +431,24 @@ export class HomeE extends g.E {
 		this.timeline.hide();
 		this.append(this.timeline);
 
-		// Create app list (adjusted for header and item list)
+		// Create app list
 		this.appList = new AppListE({
 			scene: this.scene,
 			width: width,
-			height: height - 140, // Reduced by item list height
+			height: height,
+			onProfileClick: () => this.switchToProfileEditor(),
 			onShopClick: () => this.switchToShop(),
 			onSettlementClick: () => this.switchToSettlement(false), // false = manual settlement
-			onAutomaticSettlementClick: () => this.switchToSettlement(true), // true = automatic settlement
-			y: 140 // Below header + item list
+			onAutomaticSettlementClick: () => this.switchToSettlement(true) // true = automatic settlement
 		});
 		this.append(this.appList);
 
-		// Create item list (positioned right below header)
+		// Create item list
 		this.itemList = new ItemListE({
 			scene: this.scene,
 			width: width,
 			height: 60, // Compact height for horizontal layout
-			itemManager: this.itemManager,
-			y: 80 // Right below header
+			itemManager: this.itemManager
 		});
 		this.append(this.itemList);
 	}
@@ -494,7 +490,9 @@ export class HomeE extends g.E {
 			x: this.screenWidth, // Start off-screen to the right
 			y: 0,
 			onComplete: () => this.switchBackToHome(),
-			onProfileChange: () => this.updateHeaderWithCurrentProfile()
+			onProfileChange: () => this.updateHeaderWithCurrentProfile(),
+			onSnsConnectionRequest: () => this.handleSnsConnectionRequest(true), // true = from profile
+			onShoppingConnectionRequest: () => this.handleShoppingConnectionRequest(true) // true = from profile
 		});
 		this.append(this.profileEditor);
 
@@ -788,7 +786,7 @@ export class HomeE extends g.E {
 				onGetRemainingTime: () => this.getRemainingTime(),
 				onIsTimelineRevealed: () => this.isTimelineVisible,
 				onShareProduct: (item: ItemData, sharedPrice: number) => this.handleProductShare(item, sharedPrice),
-				onSnsConnectionRequest: () => this.handleSnsConnectionRequest()
+				onSnsConnectionRequest: () => this.handleSnsConnectionRequest(false) // false = from shop
 			});
 			this.append(this.shop);
 		} else {
@@ -1160,14 +1158,33 @@ export class HomeE extends g.E {
 
 	/**
 	 * Handles SNS connection request from disabled share button
+	 * @param fromProfile Whether this request is from profile screen (true) or shop screen (false)
 	 */
-	private handleSnsConnectionRequest(): void {
-		// First, go back to home if we're in shop
-		if (this.isShopVisible) {
-			this.switchBackFromShop();
-		}
+	private handleSnsConnectionRequest(fromProfile: boolean = false): void {
+		if (fromProfile) {
+			// From profile screen - execute task without screen transition
+			this.executeSnsTask();
+		} else {
+			// From shop screen - go back to home first, then execute task
+			if (this.isShopVisible) {
+				this.switchBackFromShop();
 
-		// Get and execute the SNS task
+				// Wait for shop-to-home animation to complete before executing SNS task
+				// This prevents layout issues caused by modal interference during animation
+				this.scene.setTimeout(() => {
+					this.executeSnsTask();
+				}, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION + 50); // Small buffer for animation completion
+			} else {
+				// If not in shop, execute immediately
+				this.executeSnsTask();
+			}
+		}
+	}
+
+	/**
+	 * Executes the SNS connection task
+	 */
+	private executeSnsTask(): void {
 		const snsTask = this.taskManager.getTask("sns");
 		if (snsTask) {
 			try {
@@ -1179,6 +1196,120 @@ export class HomeE extends g.E {
 				console.error("SNS task execution error:", error);
 			}
 		}
+	}
+
+	/**
+	 * Handles shopping connection request from profile editor
+	 * @param fromProfile Whether this request is from profile screen (true) or other locations (false)
+	 */
+	private handleShoppingConnectionRequest(fromProfile: boolean = false): void {
+		if (fromProfile) {
+			// From profile screen - execute task without screen transition to shop
+			this.executeShoppingTaskFromProfile();
+		} else {
+			// From other locations - execute task and may transition to shop
+			if (this.isShopVisible) {
+				this.switchBackFromShop();
+
+				// Wait for shop-to-home animation to complete before executing shopping task
+				// This prevents layout issues caused by modal interference during animation
+				this.scene.setTimeout(() => {
+					this.executeShoppingTask();
+				}, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION + 50); // Small buffer for animation completion
+			} else {
+				// If not in shop, execute immediately
+				this.executeShoppingTask();
+			}
+		}
+	}
+
+	/**
+	 * Executes the shopping connection task
+	 */
+	private executeShoppingTask(): void {
+		const shoppingTask = this.taskManager.getTask("shopping");
+		if (shoppingTask) {
+			try {
+				const result = this.taskManager.executeTask(shoppingTask);
+				if (!result.success) {
+					console.warn(`Shopping task execution failed: ${result.message}`);
+				}
+			} catch (error) {
+				console.error("Shopping task execution error:", error);
+			}
+		}
+	}
+
+	/**
+	 * Executes the shopping connection task from profile screen (without shop app reveal)
+	 */
+	private executeShoppingTaskFromProfile(): void {
+		const shoppingTask = this.taskManager.getTask("shopping");
+		if (shoppingTask && !shoppingTask.completed) {
+			// Show shopping connection modal first
+			this.showShoppingConnectionModal(shoppingTask);
+		}
+	}
+
+	/**
+	 * Shows shopping connection modal and handles task completion
+	 */
+	private showShoppingConnectionModal(shoppingTask: TaskData): void {
+		// Close any existing modal first
+		if (this.currentModal) {
+			this.currentModal.destroy();
+			this.currentModal = undefined;
+		}
+
+		const modalMessage = "通販サービスと連携しました！\n\n通販アプリが利用可能になりました。\n商品を購入してポイントを獲得しましょう！";
+
+		this.currentModal = new ModalE({
+			scene: this.scene,
+			multi: this.gameContext.gameMode.mode === "multi",
+			name: "shoppingConnectionModal",
+			args: shoppingTask.id,
+			title: "通販アプリ解放！",
+			message: modalMessage,
+			width: 500,
+			height: 300,
+			onClose: () => {
+				this.currentModal = undefined;
+			},
+		});
+
+		// Add OK button to modal
+		this.currentModal.replaceCloseButton({
+			text: "OK",
+			backgroundColor: "#2980b9",
+			textColor: "white",
+			fontSize: 14,
+			width: 80,
+			height: 35,
+			onComplete: () => {
+				// Complete task when OK is pressed
+				this.completeShoppingTaskFromProfile(shoppingTask);
+			}
+		});
+
+		// Append modal to scene
+		this.scene.append(this.currentModal);
+	}
+
+	/**
+	 * Completes shopping task from profile without automatic shop transition
+	 */
+	private completeShoppingTaskFromProfile(shoppingTask: TaskData): void {
+		// Manually complete the task
+		shoppingTask.completed = true;
+
+		// Add points for task completion
+		this.addScore(shoppingTask.rewardPoints, "task", `Task completed: ${shoppingTask.title}`);
+
+		// Ensure shop app is available by revealing it without auto-open
+		this.appList.revealShopApp(false); // false = don't auto-open
+
+		// Remove task from UI
+		this.taskList.completeTaskExternal(shoppingTask.id);
 	}
 
 	/**

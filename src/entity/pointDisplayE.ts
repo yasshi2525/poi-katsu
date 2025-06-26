@@ -114,11 +114,11 @@ export class PointDisplayE extends g.E {
 			x: 0,
 			y: 0,
 			width: screenWidth,
-			height: 60,
+			height: 69, // Match NumberE height from bitmap font
 			children: {
 				score: {
 					x: 20,
-					y: 20,
+					y: 0, // Set NumberE top edge to 0
 					width: 160,
 					height: 20,
 					children: {
@@ -128,7 +128,7 @@ export class PointDisplayE extends g.E {
 				},
 				time: {
 					x: screenWidth - 300,
-					y: 25,
+					y: 0, // Set NumberE top edge to 0
 					width: 160,
 					height: 16,
 					children: {

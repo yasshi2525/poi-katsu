@@ -126,13 +126,13 @@ export class AdBannerE extends g.E {
 	 */
 	private createLayoutConfig(screenWidth: number, _screenHeight: number): LayoutConfig {
 		return {
-			x: 20,
-			y: 80, // Fixed internal positioning
-			width: screenWidth - 760,
+			x: 20, // Match TaskListE item margin for left block alignment
+			y: 149, // Below header(69) + item list(60) + margin(20) = 149
+			width: screenWidth - 760, // Match TaskListE item width (with margins)
 			height: 120,
 			children: {
 				saleTag: {
-					x: screenWidth - 760 - 100,
+					x: screenWidth - 880, // Adjusted for new width (screenWidth - 760 - 120 = screenWidth - 880)
 					y: -10,
 					width: 120,
 					height: 30,

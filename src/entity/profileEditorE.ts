@@ -24,6 +24,10 @@ export interface ProfileEditorParameterObject extends g.EParameterObject {
 	onComplete: () => void;
 	/** Callback when profile data changes (optional) */
 	onProfileChange?: () => void;
+	/** Callback when SNS connection is requested */
+	onSnsConnectionRequest?: () => void;
+	/** Callback when shopping connection is requested */
+	onShoppingConnectionRequest?: () => void;
 }
 
 /**
@@ -37,6 +41,8 @@ export class ProfileEditorE extends g.E {
 	private readonly screenHeight: number;
 	private readonly onComplete: () => void;
 	private readonly onProfileChange?: () => void;
+	private readonly onSnsConnectionRequest?: () => void;
+	private readonly onShoppingConnectionRequest?: () => void;
 	private avatarSelection?: RadioButtonGroupE;
 	private selectedAvatarId?: string;
 	private nameButtonText?: g.Label;
@@ -53,6 +59,8 @@ export class ProfileEditorE extends g.E {
 		this.screenHeight = options.height;
 		this.onComplete = options.onComplete;
 		this.onProfileChange = options.onProfileChange;
+		this.onSnsConnectionRequest = options.onSnsConnectionRequest;
+		this.onShoppingConnectionRequest = options.onShoppingConnectionRequest;
 
 		this.createLayout();
 
@@ -136,6 +144,9 @@ export class ProfileEditorE extends g.E {
 
 		// Avatar selection section
 		this.createAvatarSection();
+
+		// Connection status section
+		this.createConnectionSection();
 
 		// Submit button
 		this.createSubmitButton();
@@ -266,6 +277,100 @@ export class ProfileEditorE extends g.E {
 	}
 
 	/**
+	 * Creates the connection status section
+	 */
+	private createConnectionSection(): void {
+		// Connection section label
+		const connectionLabel = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 18,
+				fontColor: "white",
+			}),
+			text: "サービス連携",
+			x: 50,
+			y: 420,
+		});
+		this.append(connectionLabel);
+
+		// SNS connection status
+		this.createConnectionItem("SNS", "sns", 450);
+
+		// Shopping connection status
+		this.createConnectionItem("通販", "shopping", 490);
+	}
+
+	/**
+	 * Creates a single connection status item
+	 */
+	private createConnectionItem(serviceName: string, taskId: string, yPosition: number): void {
+		const isConnected = this.gameContext.hasAchievedTask(taskId);
+
+		// Service name label
+		const serviceLabel = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 14,
+				fontColor: "white",
+			}),
+			text: `${serviceName}：`,
+			x: 50,
+			y: yPosition + 5,
+		});
+		this.append(serviceLabel);
+
+		if (isConnected) {
+			// Show connected status
+			const statusLabel = new g.Label({
+				scene: this.scene,
+				font: new g.DynamicFont({
+					game: this.scene.game,
+					fontFamily: "sans-serif",
+					size: 14,
+					fontColor: "#27ae60",
+				}),
+				text: "接続済み ✓",
+				x: 120,
+				y: yPosition + 5,
+			});
+			this.append(statusLabel);
+		} else {
+			// Show connect button
+			const connectButton = new LabelButtonE({
+				scene: this.scene,
+				multi: this.gameContext.gameMode.mode === "multi",
+				name: `connect${serviceName}Button`,
+				args: taskId,
+				width: 80,
+				height: 30,
+				x: 120,
+				y: yPosition,
+				text: "接続",
+				backgroundColor: "#3498db",
+				textColor: "white",
+				fontSize: 12,
+				onComplete: (taskId: string) => this.handleConnectionRequest(taskId),
+			});
+			this.append(connectButton);
+		}
+	}
+
+	/**
+	 * Handles connection requests
+	 */
+	private handleConnectionRequest(taskId: string): void {
+		if (taskId === "sns" && this.onSnsConnectionRequest) {
+			this.onSnsConnectionRequest();
+		} else if (taskId === "shopping" && this.onShoppingConnectionRequest) {
+			this.onShoppingConnectionRequest();
+		}
+	}
+
+	/**
 	 * Creates the submit button
 	 */
 	private createSubmitButton(): void {
@@ -277,7 +382,7 @@ export class ProfileEditorE extends g.E {
 			width: 120,
 			height: 50,
 			x: 50,
-			y: 480,
+			y: 540, // Moved down to accommodate connection section
 			text: "完了",
 			backgroundColor: "#27ae60",
 			textColor: "white",

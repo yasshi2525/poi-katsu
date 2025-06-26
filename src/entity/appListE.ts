@@ -40,6 +40,8 @@ export interface AppListParameterObject extends g.EParameterObject {
 	width: number;
 	/** Screen height */
 	height: number;
+	/** Callback when profile app is clicked */
+	onProfileClick?: () => void;
 	/** Callback when shop app is clicked */
 	onShopClick?: () => void;
 	/** Callback when settlement app is clicked */
@@ -53,6 +55,7 @@ export interface AppListParameterObject extends g.EParameterObject {
  */
 export class AppListE extends g.E {
 	private readonly layout: LayoutConfig;
+	private readonly onProfileClick?: () => void;
 	private readonly onShopClick?: () => void;
 	private readonly onSettlementClick?: () => void;
 	private readonly onAutomaticSettlementClick?: () => void;
@@ -70,6 +73,7 @@ export class AppListE extends g.E {
 	constructor(options: AppListParameterObject) {
 		super(options);
 
+		this.onProfileClick = options.onProfileClick;
 		this.onShopClick = options.onShopClick;
 		this.onSettlementClick = options.onSettlementClick;
 		this.onAutomaticSettlementClick = options.onAutomaticSettlementClick;
@@ -89,8 +93,9 @@ export class AppListE extends g.E {
 
 	/**
 	 * Reveals the shop app with animation
+	 * @param autoOpen Whether to automatically open shop after reveal (default: true)
 	 */
-	revealShopApp(): void {
+	revealShopApp(autoOpen: boolean = true): void {
 		if (this.shopAppVisible) return;
 
 		// Update app visibility state
@@ -120,12 +125,14 @@ export class AppListE extends g.E {
 				.to({ opacity: 1 }, ANIMATION_CONFIG.SHOP_FADE_IN_DURATION);
 		});
 
-		// Add highlighting effect after fade-in
-		timeline.create(this)
-			.wait(ANIMATION_CONFIG.SHOP_FADE_IN_DURATION)
-			.call(() => {
-				this.highlightShopApp();
-			});
+		// Add highlighting effect after fade-in (only if autoOpen is true)
+		if (autoOpen) {
+			timeline.create(this)
+				.wait(ANIMATION_CONFIG.SHOP_FADE_IN_DURATION)
+				.call(() => {
+					this.highlightShopApp();
+				});
+		}
 	}
 
 	/**
@@ -240,9 +247,9 @@ export class AppListE extends g.E {
 	 */
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
-			x: 0,
-			y: screenHeight - 100,
-			width: screenWidth,
+			x: 20, // Match TaskListE item margin
+			y: screenHeight - 100, // Position at screen bottom
+			width: screenWidth - 760, // Match TaskListE item width (with margins)
 			height: 100,
 			children: {
 				title: { x: 20, y: -25, width: 100, height: 16 },
@@ -343,6 +350,15 @@ export class AppListE extends g.E {
 			touchable: true,
 			local: true,
 		});
+
+		// Add click handler for profile app
+		if (app.name === "プロフィール") {
+			iconBg.onPointDown.add(() => {
+				if (this.onProfileClick) {
+					this.onProfileClick();
+				}
+			});
+		}
 
 		// Add click handler for shop app
 		if (app.name === "通販") {

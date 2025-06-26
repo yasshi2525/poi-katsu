@@ -124,15 +124,15 @@ export class TaskListE extends g.E {
 	 */
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
-			x: 20,
-			y: 220, // Fixed internal positioning
-			width: screenWidth - 760,
+			x: 20, // Match AdBanner margin for left block alignment
+			y: 289, // Below header(69) + ItemList(60) + margin(20) + AdBanner(120) + margin(29) = 289
+			width: screenWidth - 720, // Right edge aligns with timeline left edge
 			height: 240,
 			children: {
 				header: {
 					x: 0,
 					y: 0,
-					width: screenWidth - 760,
+					width: screenWidth - 720, // Match container width
 					height: 30,
 					children: {
 						newBadge: { x: 0, y: 0, width: 50, height: 25 },
@@ -141,16 +141,16 @@ export class TaskListE extends g.E {
 					}
 				},
 				item: {
-					x: 0,
+					x: 20, // Left margin
 					y: 40,
-					width: screenWidth - 800,
+					width: screenWidth - 760, // Container width minus left and right margins (20 + 20)
 					height: 50,
 					children: {
 						icon: { x: 15, y: 15, width: 20, height: 20 },
 						title: { x: 50, y: 10, width: 200, height: 16 },
 						reward: { x: 50, y: 30, width: 100, height: 12 },
-						executeBtn: { x: screenWidth - 860, y: 10, width: 60, height: 30 },
-						executeLabel: { x: screenWidth - 845, y: 18, width: 30, height: 12 }
+						executeBtn: { x: screenWidth - 840, y: 10, width: 60, height: 30 },
+						executeLabel: { x: screenWidth - 825, y: 18, width: 30, height: 12 }
 					}
 				}
 			}
@@ -222,7 +222,7 @@ export class TaskListE extends g.E {
 
 		activeTasks.forEach((task, index) => {
 			const taskItemY = this.layout.y + this.layout.children!.item.y + (index * 60);
-			this.createTaskItem(task, this.layout.x, taskItemY);
+			this.createTaskItem(task, this.layout.children!.item.x, taskItemY);
 		});
 	}
 
@@ -243,12 +243,12 @@ export class TaskListE extends g.E {
 			y: y,
 		});
 
-		// Task background
+		// Task background with margin
 		const taskBg = new g.FilledRect({
 			scene: this.scene,
 			width: itemLayout.width,
 			height: itemLayout.height,
-			x: 0,
+			x: 0, // Background starts from item container position (which includes margin)
 			y: 0,
 			cssColor: "#34495e",
 		});

@@ -71,7 +71,7 @@ export class TimelineE extends g.E {
 	private affiliateButtons: Map<string, LabelButtonE<string>> = new Map();
 	private timelineItems: g.E[] = [];
 	private loadingOverlay?: g.E;
-	private scrollContainer?: g.E;
+	private scrollContainer?: g.Pane;
 	private scrollOffset: number = 0;
 	private maxScrollOffset: number = 0;
 	private lastScrollY: number = 0;
@@ -103,12 +103,12 @@ export class TimelineE extends g.E {
 	addSharedPost(sharedPost: SharedPostData): void {
 		this.sharedPosts.unshift(sharedPost); // Add to beginning
 
-		// Only animate if timeline is visible, otherwise just refresh the display
+		// Only animate if timeline is visible, otherwise add post silently
 		if (this.opacity > 0) {
 			this.animateNewPost();
 		} else {
-			// Timeline is hidden, use synchronous refresh to ensure posts are ready when revealed
-			this.refreshTimeline();
+			// Timeline is hidden, add post without animation to preserve existing content
+			this.addPostSilently();
 		}
 	}
 
@@ -139,9 +139,9 @@ export class TimelineE extends g.E {
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
 			x: screenWidth - 720, // Fixed internal positioning
-			y: 85, // Fixed internal positioning - relative to container
+			y: 149, // Below header(69) + item list(60) + margin(20) = 149
 			width: 700,
-			height: screenHeight - 265,
+			height: screenHeight - 169, // Bottom: margin(20) from screen bottom
 			children: {
 				header: {
 					x: 0,
@@ -186,7 +186,7 @@ export class TimelineE extends g.E {
 	 */
 	private handleScrollStart(ev: g.PointDownEvent): void {
 		this.isScrolling = true;
-		this.lastScrollY = ev.point.y;
+		this.lastScrollY = this.scrollOffset;
 	}
 
 	/**
@@ -195,19 +195,17 @@ export class TimelineE extends g.E {
 	private handleScrollMove(ev: g.PointMoveEvent): void {
 		if (!this.isScrolling || !this.scrollContainer) return;
 
-		this.scrollOffset += ev.prevDelta.y;
+		this.scrollOffset = this.lastScrollY + ev.startDelta.y;
 
 		// Clamp scroll offset (negative values scroll down, positive scroll up)
 		this.scrollOffset = Math.max(-this.maxScrollOffset, Math.min(this.scrollOffset, 0));
 
 		// Update all timeline items position based on scroll offset
 		this.timelineItems.forEach((item, index) => {
-			const baseY = this.layout.children!.item.y + (index * 90);
-			item.y = baseY + this.scrollOffset;
+			// Update item position based on index and scroll offset
+			item.y = index * 90 + this.scrollOffset;
 			item.modified();
 		});
-
-		this.lastScrollY = ev.point.y;
 	}
 
 	/**
@@ -245,14 +243,14 @@ export class TimelineE extends g.E {
 	 */
 	private createScrollableContainer(): void {
 		// Create scrollable container that clips content
-		this.scrollContainer = new g.E({
+		this.scrollContainer = new g.Pane({
 			scene: this.scene,
 			width: this.layout.width,
 			height: this.layout.height - 35, // Subtract header height
 			x: this.layout.x,
 			y: this.layout.y + 35, // Position below header
 			touchable: true,
-			local: true // Enable local coordinates for proper scrolling
+			local: true
 		});
 
 		// Add scroll event handling
@@ -261,6 +259,33 @@ export class TimelineE extends g.E {
 		this.scrollContainer.onPointUp.add((ev) => this.handleScrollEnd(ev));
 
 		this.append(this.scrollContainer);
+	}
+
+	/**
+	 * Adds a post silently without animation to preserve existing timeline content
+	 */
+	private addPostSilently(): void {
+		// Create new post at the top position
+		const newPostY = this.scrollOffset;
+		const newPost = this.createAffiliateTimelineItem(this.sharedPosts[0], 0, newPostY);
+
+		// Shift all existing posts down by updating their base positions
+		this.timelineItems.forEach((item, index) => {
+			// Update item position based on index
+			item.y = (index + 1) * 90 + this.scrollOffset;
+			item.modified();
+		});
+
+		// Add new post to beginning
+		this.timelineItems.unshift(newPost);
+
+		// Add to scroll container
+		this.scrollContainer!.append(newPost);
+
+		// Update max scroll offset to account for new content
+		const totalContentHeight = this.timelineItems.length * 90;
+		const containerHeight = this.scrollContainer!.height;
+		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
 	}
 
 	/**
@@ -292,14 +317,15 @@ export class TimelineE extends g.E {
 		const defaultItems = [
 			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーがシェアした商品を購入できます", reactions: { like: true, comment: true } },
 			{ user: "[ガイド]", action: "💰 アフィリエイト機能で商品をシェアして、購入されるとポイント獲得！", reactions: { like: true, comment: true } },
-			{ user: "[ガイド]", action: "🛒 商品を購入すると、シェアした人にアフィリエイト報酬が入ります", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "🛒 商品をどんどんシェアして、アフィリエイト報酬を得ましょう！", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "💹 商品の価格は変化しますが、シェアされた商品はそのときの価格で購入できます", reactions: { like: true, comment: true } },
 		];
 
 		let itemIndex = 0;
 
 		// Add shared posts first
 		this.sharedPosts.forEach((sharedPost) => {
-			const itemY = this.layout.children!.item.y + (itemIndex * 90); // Relative to scroll container
+			const itemY = itemIndex * 90; // Relative to scroll container
 			const postItem = this.createAffiliateTimelineItem(sharedPost, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
 			itemIndex++;
@@ -307,15 +333,15 @@ export class TimelineE extends g.E {
 
 		// Add default items
 		defaultItems.forEach((item) => {
-			const itemY = this.layout.children!.item.y + (itemIndex * 90); // Relative to scroll container
+			const itemY = itemIndex * 90; // Relative to scroll container
 			const postItem = this.createTimelineItem(item.user, item.action, item.reactions, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
 			itemIndex++;
 		});
 
 		// Calculate max scroll offset based on content height
-		const totalContentHeight = (itemIndex * 90) + this.layout.children!.item.y;
-		const containerHeight = this.scrollContainer ? this.scrollContainer.height : this.layout.height - 35;
+		const totalContentHeight = itemIndex * 90;
+		const containerHeight = this.scrollContainer!.height;
 		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
 	}
 
@@ -448,15 +474,7 @@ export class TimelineE extends g.E {
 		}
 
 		// Append container to scroll container and return it
-		if (this.scrollContainer) {
-			// Adjust position relative to scroll container
-			postContainer.x -= this.scrollContainer.x;
-			postContainer.y -= this.scrollContainer.y;
-			postContainer.modified();
-			this.scrollContainer.append(postContainer);
-		} else {
-			this.append(postContainer);
-		}
+		this.scrollContainer!.append(postContainer);
 		return postContainer;
 	}
 
@@ -625,11 +643,7 @@ export class TimelineE extends g.E {
 		postContainer.append(actionText);
 
 		// Append container to scroll container and return it
-		if (this.scrollContainer) {
-			this.scrollContainer.append(postContainer);
-		} else {
-			this.append(postContainer);
-		}
+		this.scrollContainer!.append(postContainer);
 		return postContainer;
 	}
 
@@ -779,11 +793,12 @@ export class TimelineE extends g.E {
 		// After shift animation, create and fade in new post
 		timeline.create(this).wait(ANIMATION_CONFIG.POST_SHIFT_DURATION).call(() => {
 			// Create new post at the top
-			const newPostY = this.layout.y + this.layout.children!.item.y;
-			const newPost = this.createAffiliateTimelineItem(this.sharedPosts[0], this.layout.x, newPostY);
+			const newPostY = this.scrollOffset;
+			const newPost = this.createAffiliateTimelineItem(this.sharedPosts[0], 0, newPostY);
 
 			// Start with opacity 0 for fade-in effect
 			newPost.opacity = 0;
+			newPost.modified();
 			this.timelineItems.unshift(newPost);
 
 			// Fade in the new post
@@ -792,6 +807,9 @@ export class TimelineE extends g.E {
 				.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
 				.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION)
 				.call(() => {
+					const totalContentHeight = this.timelineItems.length * 90;
+					const containerHeight = this.scrollContainer!.height;
+					this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
 					// Animation complete, remove loading overlay
 					this.destroyTimelineLoadingOverlay();
 				});
