@@ -32,7 +32,7 @@ export class MainScene extends BaseScene {
 	private pendingSharedPosts: SharedPostData[] = []; // Store posts received before HomeE is created
 	private settlementTimer?: g.TimerIdentifier; // Timer ID for fixed settlement duration
 
-	constructor(param: g.SceneParameterObject & { mode: "multi" | "ranking"; totalTimeLimit: number }) {
+	constructor(param: g.SceneParameterObject & { mode: "multi" | "ranking"; totalTimeLimit: number; gameContext?: GameContext }) {
 		super({
 			...param,
 			assetIds: [
@@ -43,23 +43,29 @@ export class MainScene extends BaseScene {
 			]
 		});
 
-		// Initialize GameContext
-		const initialPlayerData = createPlayerData(this.game.selfId, createInitialPlayerProfile(), 0);
+		// Initialize GameContext (use provided context or create new one)
+		if (param.gameContext) {
+			// Use inherited GameContext from TitleScene
+			this.gameContext = param.gameContext;
+		} else {
+			// Create new GameContext (fallback for direct MainScene initialization)
+			const initialPlayerData = createPlayerData(this.game.selfId, createInitialPlayerProfile(), 0);
 
-		const gameMode = {
-			mode: param.mode,
-			maxPlayers: 4,
-			currentPlayers: 1
-		};
+			const gameMode = {
+				mode: param.mode,
+				maxPlayers: 4,
+				currentPlayers: 1
+			};
 
-		this.gameContext = new GameContext(
-			initialPlayerData,
-			gameMode,
-			this.game.vars.gameState,
-			this.game.localRandom,
-			param.totalTimeLimit,
-			this.game.fps
-		);
+			this.gameContext = new GameContext(
+				initialPlayerData,
+				gameMode,
+				this.game.vars.gameState,
+				this.game.localRandom,
+				param.totalTimeLimit,
+				this.game.fps
+			);
+		}
 
 		this.onLoad.add(() => {
 			// Initialize MarketManager for price management

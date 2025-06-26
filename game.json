@@ -255,6 +255,18 @@
 			"type": "script",
 			"path": "script/data/taskConstants.js",
 			"global": true
+		},
+		"coin-diagonal": {
+			"type": "image",
+			"path": "image/coin-diagonal.png",
+			"width": 150,
+			"height": 150
+		},
+		"coin-front": {
+			"type": "image",
+			"path": "image/coin-front.png",
+			"width": 100,
+			"height": 100
 		}
 	},
 	"environment": {
