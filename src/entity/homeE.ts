@@ -8,7 +8,7 @@ import { ItemManager } from "../manager/itemManager";
 import { MarketManager } from "../manager/marketManager";
 import { PointManager, POINT_CONSTANTS } from "../manager/pointManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
-import { AdBannerE, BannerData } from "./adBannerE";
+import { AdBannerE, BannerData, BannerContext } from "./adBannerE";
 import { AppListE } from "./appListE";
 import { HeaderE } from "./headerE";
 import { ItemListE } from "./itemListE";
@@ -55,8 +55,6 @@ export interface HomeParameterObject extends g.EParameterObject {
 	pointManager: PointManager;
 	/** Function to update current player score in MainScene */
 	updateCurrentPlayerScore: (score: number) => void;
-	/** Function to transition to ranking scene */
-	transitionToRanking: () => void;
 }
 
 /**
@@ -88,7 +86,6 @@ export class HomeE extends g.E {
 
 	// MainScene function callbacks
 	private updateCurrentPlayerScore!: (score: number) => void;
-	private transitionToRanking!: () => void;
 
 	// Screen state
 	private readonly screenWidth: number;
@@ -108,6 +105,7 @@ export class HomeE extends g.E {
 		{
 			id: "welcome_ad",
 			priority: 1,
+			enabled: true,
 			title: "ポイ活ウォーズへようこそ！",
 			subtitle: "広告をタップしてさらにポイントゲット",
 			saleTag: "タップで100ptゲット！",
@@ -115,11 +113,14 @@ export class HomeE extends g.E {
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
 			saleTagColor: "#f1c40f",
-			clickHandler: () => this.onBannerClick("welcome_ad")
+			clickHandler: (context: BannerContext) => {
+				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Welcome ad banner click");
+			}
 		},
 		{
 			id: "shopping_recommend",
 			priority: 2,
+			enabled: true,
 			title: "通販でもっとポイント！",
 			subtitle: "商品購入でポイント大量獲得",
 			saleTag: "お得！",
@@ -127,11 +128,15 @@ export class HomeE extends g.E {
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
 			saleTagColor: "#f39c12",
-			clickHandler: () => this.onBannerClick("shopping_recommend")
+			clickHandler: (context: BannerContext) => {
+				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Shopping recommendation banner click");
+				context.executeTask("shopping");
+			}
 		},
 		{
 			id: "sale_notification",
 			priority: 3,
+			enabled: true,
 			title: "セール開催中！",
 			subtitle: "今すぐ通販をチェック",
 			saleTag: "限定！",
@@ -139,11 +144,15 @@ export class HomeE extends g.E {
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
 			saleTagColor: "#f1c40f",
-			clickHandler: () => this.onBannerClick("sale_notification")
+			clickHandler: (context: BannerContext) => {
+				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Sale notification banner click");
+				context.switchToShop();
+			}
 		},
 		{
 			id: "sns_recommend",
 			priority: 4,
+			enabled: true,
 			title: "SNS連携でもっとお得！",
 			subtitle: "商品シェアでポイント還元",
 			saleTag: "シェア！",
@@ -151,7 +160,10 @@ export class HomeE extends g.E {
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
 			saleTagColor: "#f1c40f",
-			clickHandler: () => this.onBannerClick("sns_recommend")
+			clickHandler: (context: BannerContext) => {
+				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "SNS recommendation banner click");
+				context.executeTask("sns");
+			}
 		}
 	];
 
@@ -170,7 +182,6 @@ export class HomeE extends g.E {
 		this.marketManager = options.marketManager;
 		this.pointManager = options.pointManager;
 		this.updateCurrentPlayerScore = options.updateCurrentPlayerScore;
-		this.transitionToRanking = options.transitionToRanking;
 
 		// Initialize managers
 		this.initializeItemManager();
@@ -226,22 +237,6 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Switches to a specific banner by ID
-	 * @param bannerId The ID of the banner to show
-	 */
-	switchToBanner(bannerId: string): void {
-		this.adBanner.switchToBanner(bannerId);
-	}
-
-	/**
-	 * Switches to the next priority banner
-	 * @param currentBannerId Current banner ID to find the next one
-	 */
-	switchToNextBanner(currentBannerId?: string): void {
-		this.adBanner.switchToNextBanner(currentBannerId);
-	}
-
-	/**
 	 * Gets the ad banner component (for testing)
 	 * @returns Ad banner component
 	 */
@@ -250,11 +245,30 @@ export class HomeE extends g.E {
 	}
 
 	/**
+	 * Sets the enabled state of a specific banner
+	 * @param bannerId The ID of the banner to enable/disable
+	 * @param enabled Whether the banner should be enabled
+	 */
+	setBannerEnabled(bannerId: string, enabled: boolean): void {
+		this.adBanner.setBannerEnabled(bannerId, enabled);
+	}
+
+	/**
 	 * Gets the task list component (for testing)
 	 * @returns Task list component
 	 */
 	getTaskList(): TaskListE {
 		return this.taskList;
+	}
+
+	/**
+	 * Refreshes the task list with updated tasks from TaskManager
+	 * Called when new tasks become available (e.g., after shopping task completion)
+	 */
+	refreshTaskList(): void {
+		if (this.taskList && this.taskManager) {
+			this.taskList.refreshTasks(this.taskManager.getTasks());
+		}
 	}
 
 	/**
@@ -363,7 +377,15 @@ export class HomeE extends g.E {
 				this.currentModal = modal;
 				this.scene.append(modal);
 			},
-			onModalClose: () => this.closeModal(),
+			onModalClose: (taskId?: string) => {
+				this.closeModal();
+				if (taskId) {
+					this.reactivateTaskButton(taskId);
+				}
+			},
+			onTaskButtonReactivate: (taskId: string) => {
+				return this.reactivateTaskButton(taskId);
+			},
 			onAchievementShow: (task: TaskData, notificationType?: string) => {
 				if (notificationType === "sns") {
 					this.showSnsRewardNotification(task);
@@ -376,7 +398,8 @@ export class HomeE extends g.E {
 			onTaskComplete: (taskId: string) => {
 				this.taskList.completeTaskExternal(taskId);
 				this.recordTaskCompletion(taskId);
-			}
+			},
+			onTaskListRefresh: () => this.refreshTaskList()
 		};
 
 		this.taskManager = new TaskManager(context);
@@ -388,13 +411,26 @@ export class HomeE extends g.E {
 	private createComponents(width: number, height: number): void {
 		// Note: header is created at scene level, not here
 
+		// Create banner context for dependency injection
+		const bannerContext: BannerContext = {
+			addScore: (points: number, source: string, description: string) => this.addScore(points, source, description),
+			executeTask: (taskId: string) => {
+				const task = this.taskManager.getTask(taskId);
+				if (task) {
+					this.taskManager.executeTask(task);
+				}
+			},
+			switchToShop: () => this.switchToShop()
+		};
+
 		// Create ad banner
 		this.adBanner = new AdBannerE({
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			width: width,
 			height: height,
-			banners: this.banners
+			banners: this.banners,
+			bannerContext: bannerContext
 		});
 		this.append(this.adBanner);
 
@@ -426,6 +462,9 @@ export class HomeE extends g.E {
 			onCheckOwnership: (itemId: string) => this.itemManager.ownsItem(itemId),
 			onGetPlayerName: () => {
 				return this.gameContext.currentPlayer.profile.name;
+			},
+			onGetPlayerId: () => {
+				return this.gameContext.currentPlayer.id;
 			}
 		});
 		this.timeline.hide();
@@ -438,8 +477,12 @@ export class HomeE extends g.E {
 			height: height,
 			onProfileClick: () => this.switchToProfileEditor(),
 			onShopClick: () => this.switchToShop(),
-			onSettlementClick: () => this.switchToSettlement(false), // false = manual settlement
-			onAutomaticSettlementClick: () => this.switchToSettlement(true) // true = automatic settlement
+			onSettlementClick: () => this.switchToSettlement(),
+			onAutomaticSettlementClick: () => this.switchToSettlement(),
+			onShopAppReveal: () => {
+				// Disable shopping recommend ad when shop app is revealed
+				this.adBanner.setBannerEnabled("shopping_recommend", false);
+			}
 		});
 		this.append(this.appList);
 
@@ -630,47 +673,6 @@ export class HomeE extends g.E {
 			});
 	}
 
-	/**
-	 * Handles banner click events
-	 * @param bannerId The ID of the clicked banner
-	 */
-	private onBannerClick(bannerId: string): void {
-		switch (bannerId) {
-			case "welcome_ad":
-				// Welcome ad: award points and switch to next banner
-				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Welcome ad banner click");
-				this.switchToNextBanner(bannerId);
-				break;
-			case "shopping_recommend":
-				// Shopping recommendation: execute shopping task action and award points
-				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Shopping recommendation banner click");
-				const shoppingTask = this.taskManager.getTask("shopping");
-				if (shoppingTask) {
-					this.taskManager.executeTask(shoppingTask);
-				}
-				this.switchToNextBanner(bannerId);
-				break;
-			case "sale_notification":
-				// Sale notification: open shop app and award points
-				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Sale notification banner click");
-				this.switchToShop();
-				this.switchToNextBanner(bannerId);
-				break;
-			case "sns_recommend":
-				// SNS recommendation: execute SNS task action and award points
-				this.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "SNS recommendation banner click");
-				const snsTask = this.taskManager.getTask("sns");
-				if (snsTask) {
-					this.taskManager.executeTask(snsTask);
-				}
-				this.switchToNextBanner(bannerId);
-				break;
-			default:
-				// Unknown banner, just switch
-				this.switchToNextBanner(bannerId);
-				break;
-		}
-	}
 
 
 
@@ -685,6 +687,9 @@ export class HomeE extends g.E {
 
 		// Make timeline visible first
 		this.timeline.show();
+
+		// Disable SNS recommend ad when timeline is revealed
+		this.adBanner.setBannerEnabled("sns_recommend", false);
 
 		// Refresh shop to show share buttons if shop exists
 		if (this.shop) {
@@ -786,7 +791,11 @@ export class HomeE extends g.E {
 				onGetRemainingTime: () => this.getRemainingTime(),
 				onIsTimelineRevealed: () => this.isTimelineVisible,
 				onShareProduct: (item: ItemData, sharedPrice: number) => this.handleProductShare(item, sharedPrice),
-				onSnsConnectionRequest: () => this.handleSnsConnectionRequest(false) // false = from shop
+				onSnsConnectionRequest: () => this.handleSnsConnectionRequest(false), // false = from shop
+				onPriceUpdate: () => {
+					// Re-enable sale notification ad when product prices are updated
+					this.adBanner.setBannerEnabled("sale_notification", true);
+				}
 			});
 			this.append(this.shop);
 		} else {
@@ -847,11 +856,12 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Switches from HomeE to SettlementE with swipe animation
-	 * @param isAutomatic Whether this is automatic settlement triggered by timer
+	 * Switches from HomeE to SettlementE with swipe animation (always automatic mode)
 	 */
-	private switchToSettlement(isAutomatic: boolean = false): void {
-		if (this.isSettlementVisible) return;
+	private switchToSettlement(): void {
+		if (this.isSettlementVisible) {
+			return;
+		}
 
 		// Create or reuse settlement positioned off-screen to the right
 		if (!this.settlement) {
@@ -859,8 +869,7 @@ export class HomeE extends g.E {
 				scene: this.scene,
 				gameContext: this.gameContext,
 				itemManager: this.itemManager,
-				pointManager: this.pointManager,
-				transitionToRanking: this.transitionToRanking
+				pointManager: this.pointManager
 			});
 			this.settlement.x = this.screenWidth; // Start off-screen to the right
 			this.settlement.y = 0;
@@ -870,8 +879,7 @@ export class HomeE extends g.E {
 			this.settlement.x = this.screenWidth;
 		}
 
-		// Set automatic mode if this is automatic settlement
-		this.settlement.setAutomaticMode(isAutomatic);
+		// Note: Automatic mode is no longer used
 
 		this.isSettlementVisible = true;
 
@@ -891,6 +899,8 @@ export class HomeE extends g.E {
 		timeline.create(this.settlement)
 			.to({ x: 0 }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
 			.call(() => {
+				// Show settlement screen and start automatic settlement process
+				this.settlement!.show();
 				// Remove overlay when animation completes
 				this.removeSwipeOverlay();
 			});
@@ -1023,6 +1033,11 @@ export class HomeE extends g.E {
 
 		// Check for collection completion and auto-complete tasks
 		this.checkCollectionCompletion(item.category);
+
+		// Notify timeline about the purchase to update button states
+		if (this.timeline && this.isTimelineVisible) {
+			this.timeline.onItemPurchasedExternal(item);
+		}
 	}
 
 	/**
@@ -1039,11 +1054,8 @@ export class HomeE extends g.E {
 		const task = this.taskManager.getTask(taskId);
 
 		if (task && !task.completed) {
-			// Complete the collection task automatically
-			const result = this.taskManager.executeTask(task);
-			if (result.success) {
-				console.log(`Auto-completed collection task: ${taskId}`);
-			}
+			// Complete the collection task automatically (not execute)
+			this.taskManager.completeTask(taskId);
 		}
 	}
 
@@ -1349,6 +1361,16 @@ export class HomeE extends g.E {
 		if (this.swipeOverlay) {
 			this.swipeOverlay.destroy();
 			this.swipeOverlay = undefined;
+		}
+	}
+
+	/**
+	 * Reactivates a task button after modal closure
+	 * @param taskId The ID of the task button to reactivate
+	 */
+	private reactivateTaskButton(taskId: string): void {
+		if (this.taskList) {
+			this.taskList.reactivateTaskButton(taskId);
 		}
 	}
 

@@ -66,9 +66,8 @@ export class TitleScene extends BaseScene {
 	}
 
 	private createGameContext(): void {
-		// 初期プレイヤーデータを作成（0番目の要素をゲームマスターとして）
-		const masterPlayerId = this.game.joinedPlayerIds[0];
-		const initialPlayerData = createPlayerData(masterPlayerId, createInitialPlayerProfile(), 0);
+		// 各プレイヤーが自分のIDでプレイヤーデータを作成
+		const initialPlayerData = createPlayerData(this.game.selfId, createInitialPlayerProfile(), 0);
 
 		const gameMode = {
 			mode: this.mode,
@@ -84,8 +83,16 @@ export class TitleScene extends BaseScene {
 			this.totalTimeLimit
 		);
 
-		// 初期参加者として記録
-		this.joinedPlayers.add(masterPlayerId);
+		// 自分を初期参加者として記録
+		this.joinedPlayers.add(initialPlayerData.id);
+
+		if (!this.isGameMaster) {
+			// ゲームマスターは自身のIDをMessageEventでブロードキャストしないので
+			// 非ゲームマスター時はここでゲームマスターのIDを追加する
+			const gameMasterId = this.game.joinedPlayerIds[0];
+			const gameMaster = createPlayerData(gameMasterId, createInitialPlayerProfile(), 0);
+			this.gameContext.addPlayer(gameMaster.id, gameMaster);
+		}
 	}
 
 	private createBackground(): void {

@@ -83,6 +83,8 @@ export interface ShopParameterObject extends g.EParameterObject {
 	onShareProduct?: (item: ItemData, sharedPrice: number) => void;
 	/** Callback when SNS connection is requested from disabled share button */
 	onSnsConnectionRequest?: () => void;
+	/** Callback when product prices are updated */
+	onPriceUpdate?: () => void;
 }
 
 /**
@@ -102,6 +104,7 @@ export class ShopE extends g.E {
 	private readonly onIsTimelineRevealed: () => boolean;
 	private readonly onShareProduct?: (item: ItemData, sharedPrice: number) => void;
 	private readonly onSnsConnectionRequest?: () => void;
+	private readonly onPriceUpdate?: () => void;
 	private currentModal?: ModalE<string>;
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
 	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
@@ -126,11 +129,18 @@ export class ShopE extends g.E {
 		this.onIsTimelineRevealed = options.onIsTimelineRevealed;
 		this.onShareProduct = options.onShareProduct;
 		this.onSnsConnectionRequest = options.onSnsConnectionRequest;
+		this.onPriceUpdate = options.onPriceUpdate;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
 
 		// Register for price update notifications from MarketManager
-		this.priceUpdateListener = () => this.updateAllPriceLabels();
+		this.priceUpdateListener = () => {
+			this.updateAllPriceLabels();
+			// Notify that prices have been updated
+			if (this.onPriceUpdate) {
+				this.onPriceUpdate();
+			}
+		};
 		this.marketManager.addPriceUpdateListener(this.priceUpdateListener);
 
 		// Immediately update price labels after setup to ensure current prices are displayed

@@ -12,11 +12,21 @@ interface LayoutConfig {
 }
 
 /**
+ * Banner context interface for accessing home functionality
+ */
+export interface BannerContext {
+	addScore: (points: number, source: string, description: string) => void;
+	executeTask: (taskId: string) => void;
+	switchToShop: () => void;
+}
+
+/**
  * Banner data interface
  */
 export interface BannerData {
 	id: string;
 	priority: number;
+	enabled: boolean;
 	title: string;
 	subtitle: string;
 	saleTag: string;
@@ -24,7 +34,7 @@ export interface BannerData {
 	titleColor: string;
 	subtitleColor: string;
 	saleTagColor: string;
-	clickHandler: () => void;
+	clickHandler: (context: BannerContext) => void;
 }
 
 /**
@@ -50,6 +60,8 @@ export interface AdBannerParameterObject extends g.EParameterObject {
 	height: number;
 	/** Banner data array */
 	banners: BannerData[];
+	/** Banner context for accessing home functionality */
+	bannerContext: BannerContext;
 }
 
 /**
@@ -57,9 +69,10 @@ export interface AdBannerParameterObject extends g.EParameterObject {
  */
 export class AdBannerE extends g.E {
 	private readonly multi: boolean;
-	private readonly banners: BannerData[];
+	private banners: BannerData[];
 	private readonly layout: LayoutConfig;
 	private currentBannerItem?: BannerItem;
+	private readonly bannerContext: BannerContext;
 
 	/**
 	 * Creates a new AdBanner instance
@@ -70,6 +83,7 @@ export class AdBannerE extends g.E {
 
 		this.multi = options.multi;
 		this.banners = options.banners;
+		this.bannerContext = options.bannerContext;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 
 		// Show the highest priority banner initially
@@ -77,37 +91,28 @@ export class AdBannerE extends g.E {
 	}
 
 	/**
-	 * Switches to a specific banner by ID
-	 * @param bannerId The ID of the banner to show
-	 */
-	switchToBanner(bannerId: string): void {
-		const banner = this.banners.find(b => b.id === bannerId);
-		if (banner) {
-			this.hideBanner();
-			this.showBanner(banner);
-		}
-	}
-
-	/**
-	 * Switches to the next priority banner
+	 * Switches to the next priority banner among enabled banners
 	 * @param currentBannerId Current banner ID to find the next one
 	 */
 	switchToNextBanner(currentBannerId?: string): void {
-		const sortedBanners = this.banners
-			.slice()
+		const enabledBanners = this.getEnabledBanners()
 			.sort((a, b) => a.priority - b.priority);
 
-		if (!currentBannerId) {
-			// Show first banner if no current banner
-			if (sortedBanners.length > 0) {
-				this.showBanner(sortedBanners[0]);
-			}
+		if (enabledBanners.length === 0) {
+			// No enabled banners, hide current banner
+			this.hideBanner();
 			return;
 		}
 
-		const currentIndex = sortedBanners.findIndex(b => b.id === currentBannerId);
-		const nextIndex = (currentIndex + 1) % sortedBanners.length;
-		const nextBanner = sortedBanners[nextIndex];
+		if (!currentBannerId) {
+			// Show first enabled banner if no current banner
+			this.showBanner(enabledBanners[0]);
+			return;
+		}
+
+		const currentIndex = enabledBanners.findIndex(b => b.id === currentBannerId);
+		const nextIndex = (currentIndex + 1) % enabledBanners.length;
+		const nextBanner = enabledBanners[nextIndex];
 
 		this.hideBanner();
 		this.showBanner(nextBanner);
@@ -119,6 +124,51 @@ export class AdBannerE extends g.E {
 	 */
 	getCurrentBanner(): BannerData | undefined {
 		return this.currentBannerItem?.bannerData;
+	}
+
+	/**
+	 * Sets the enabled state of a specific banner
+	 * @param bannerId The ID of the banner to enable/disable
+	 * @param enabled Whether the banner should be enabled
+	 */
+	setBannerEnabled(bannerId: string, enabled: boolean): void {
+		const banner = this.banners.find(b => b.id === bannerId);
+		if (banner) {
+			banner.enabled = enabled;
+
+			// If current banner was disabled, switch to next enabled banner
+			if (!enabled && this.currentBannerItem?.bannerData.id === bannerId) {
+				this.showNextEnabledBanner();
+			} else if (enabled && !this.currentBannerItem) {
+				// If a banner was enabled and no banner is currently displayed, show it
+				this.showBanner(banner);
+			}
+			// Note: When enabling a banner while another is displayed, we don't change the current display
+		}
+	}
+
+	/**
+	 * Gets all enabled banners
+	 * @returns Array of enabled banners
+	 */
+	private getEnabledBanners(): BannerData[] {
+		return this.banners.filter(banner => banner.enabled);
+	}
+
+	/**
+	 * Shows the next enabled banner with highest priority
+	 */
+	private showNextEnabledBanner(): void {
+		const enabledBanners = this.getEnabledBanners()
+			.sort((a, b) => a.priority - b.priority);
+
+		if (enabledBanners.length > 0) {
+			this.hideBanner();
+			this.showBanner(enabledBanners[0]);
+		} else {
+			// No enabled banners, hide current banner
+			this.hideBanner();
+		}
 	}
 
 	/**
@@ -147,14 +197,14 @@ export class AdBannerE extends g.E {
 	}
 
 	/**
-	 * Shows the banner with the highest priority (lowest priority number)
+	 * Shows the banner with the highest priority (lowest priority number) among enabled banners
 	 */
 	private showTopPriorityBanner(): void {
-		if (this.banners.length === 0) return;
+		const enabledBanners = this.getEnabledBanners();
+		if (enabledBanners.length === 0) return;
 
-		// Sort banners by priority (ascending) and take the first one
-		const topBanner = this.banners
-			.slice()
+		// Sort enabled banners by priority (ascending) and take the first one
+		const topBanner = enabledBanners
 			.sort((a, b) => a.priority - b.priority)[0];
 
 		this.showBanner(topBanner);
@@ -262,7 +312,11 @@ export class AdBannerE extends g.E {
 			onComplete: (bannerId: string) => {
 				const bannerData = this.banners.find(b => b.id === bannerId);
 				if (bannerData) {
-					bannerData.clickHandler();
+					// Execute banner click handler
+					bannerData.clickHandler(this.bannerContext);
+
+					// Auto-disable current banner and switch to next
+					this.setBannerEnabled(bannerId, false);
 				}
 			},
 		});

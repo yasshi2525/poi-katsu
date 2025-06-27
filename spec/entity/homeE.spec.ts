@@ -620,25 +620,26 @@ describe("HomeE", () => {
 			expect(getCurrentBannerId()).toBe("shopping_recommend");
 		});
 
-		it("should cycle through all banners in priority order", async () => {
+		it("should progress through banners and disable clicked ones", async () => {
 			// Start with welcome_ad (priority 1)
 			expect(getCurrentBannerId()).toBe("welcome_ad");
 
-			// Click to switch to shopping_recommend (priority 2)
+			// Click welcome_ad - should disable it and switch to shopping_recommend (priority 2)
 			await clickBanner("welcome_ad");
 			expect(getCurrentBannerId()).toBe("shopping_recommend");
 
-			// Click to switch to sale_notification (priority 3)
+			// Click shopping_recommend - should disable it and switch to sale_notification (priority 3)
 			await clickBanner("shopping_recommend");
 			expect(getCurrentBannerId()).toBe("sale_notification");
 
-			// Click to switch to sns_recommend (priority 4)
+			// Click sale_notification - should disable it and switch to sns_recommend (priority 4)
 			await clickBanner("sale_notification");
 			expect(getCurrentBannerId()).toBe("sns_recommend");
 
-			// Click to cycle back to welcome_ad (priority 1)
+			// Click sns_recommend - should disable it and hide all banners (no more enabled banners)
 			await clickBanner("sns_recommend");
-			expect(getCurrentBannerId()).toBe("welcome_ad");
+			await clickBanner("sale_notification");
+			expect(getCurrentBannerId()).toBe(null);
 		});
 
 		it("should award points when welcome_ad banner is clicked", async () => {
@@ -656,9 +657,9 @@ describe("HomeE", () => {
 		});
 
 		it("should award points when sale_notification banner is clicked", async () => {
-			// Navigate to sale_notification banner
-			await clickBanner("welcome_ad"); // Switch to shopping_recommend
-			await clickBanner("shopping_recommend"); // Switch to sale_notification
+			// Navigate to sale_notification banner by disabling previous banners
+			await clickBanner("welcome_ad"); // Disable welcome_ad, switch to shopping_recommend
+			await clickBanner("shopping_recommend"); // Disable shopping_recommend, switch to sale_notification
 
 			expect(getCurrentBannerId()).toBe("sale_notification");
 
@@ -670,29 +671,6 @@ describe("HomeE", () => {
 
 			// Verify score increased by 100
 			expect(home.getScore()).toBe(currentScore + 100);
-		});
-
-		it("should allow switching to specific banner by ID", () => {
-			// Start with welcome_ad
-			expect(getCurrentBannerId()).toBe("welcome_ad");
-
-			// Switch directly to sale_notification
-			home.switchToBanner("sale_notification");
-			expect(getCurrentBannerId()).toBe("sale_notification");
-
-			// Switch directly to shopping_recommend
-			home.switchToBanner("shopping_recommend");
-			expect(getCurrentBannerId()).toBe("shopping_recommend");
-		});
-
-		it("should handle invalid banner ID gracefully", () => {
-			const initialBannerId = getCurrentBannerId();
-
-			// Try to switch to non-existent banner
-			home.switchToBanner("non_existent_banner");
-
-			// Should remain on the same banner
-			expect(getCurrentBannerId()).toBe(initialBannerId);
 		});
 
 		it("should only show one banner at a time", () => {

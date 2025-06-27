@@ -52,6 +52,8 @@ export interface TimelineParameterObject extends g.EParameterObject {
 	onCheckOwnership?: (itemId: string) => boolean;
 	/** Callback to get current player name */
 	onGetPlayerName?: () => string;
+	/** Callback to get current player ID */
+	onGetPlayerId?: () => string;
 }
 
 /**
@@ -67,6 +69,7 @@ export class TimelineE extends g.E {
 	private readonly onItemPurchased?: (item: ItemData) => void;
 	private readonly onCheckOwnership?: (itemId: string) => boolean;
 	private readonly onGetPlayerName?: () => string;
+	private readonly onGetPlayerId?: () => string;
 	private sharedPosts: SharedPostData[] = [];
 	private affiliateButtons: Map<string, LabelButtonE<string>> = new Map();
 	private timelineItems: g.E[] = [];
@@ -76,6 +79,7 @@ export class TimelineE extends g.E {
 	private maxScrollOffset: number = 0;
 	private lastScrollY: number = 0;
 	private isScrolling: boolean = false;
+	private isAnimating: boolean = false;
 
 	/**
 	 * Creates a new Timeline instance
@@ -92,6 +96,7 @@ export class TimelineE extends g.E {
 		this.onItemPurchased = options.onItemPurchased;
 		this.onCheckOwnership = options.onCheckOwnership;
 		this.onGetPlayerName = options.onGetPlayerName;
+		this.onGetPlayerId = options.onGetPlayerId;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
 	}
@@ -131,6 +136,13 @@ export class TimelineE extends g.E {
 			sharedPost.purchaseCount++;
 			this.updatePurchaseCount(postId); // Update display without destroying children
 		}
+	}
+
+	/**
+	 * External callback for item purchases from other sources (shop, etc.)
+	 */
+	onItemPurchasedExternal(item: ItemData): void {
+		this.updateAllButtonsForItem(item.id);
 	}
 
 	/**
@@ -185,6 +197,9 @@ export class TimelineE extends g.E {
 	 * Handles scroll start
 	 */
 	private handleScrollStart(ev: g.PointDownEvent): void {
+		if (this.isAnimating) {
+			return;
+		}
 		this.isScrolling = true;
 		this.lastScrollY = this.scrollOffset;
 	}
@@ -193,18 +208,35 @@ export class TimelineE extends g.E {
 	 * Handles scroll movement
 	 */
 	private handleScrollMove(ev: g.PointMoveEvent): void {
-		if (!this.isScrolling || !this.scrollContainer) return;
+		if (!this.isScrolling || !this.scrollContainer || this.isAnimating) {
+			return;
+		}
 
+		const oldScrollOffset = this.scrollOffset;
 		this.scrollOffset = this.lastScrollY + ev.startDelta.y;
 
 		// Clamp scroll offset (negative values scroll down, positive scroll up)
 		this.scrollOffset = Math.max(-this.maxScrollOffset, Math.min(this.scrollOffset, 0));
 
+		// Round scroll offset to prevent micro-movements
+		this.scrollOffset = Math.round(this.scrollOffset);
+
+		// Only update if scroll offset actually changed significantly
+		if (Math.abs(oldScrollOffset - this.scrollOffset) < 1) {
+			return;
+		}
+
 		// Update all timeline items position based on scroll offset
 		this.timelineItems.forEach((item, index) => {
+			const oldY = item.y;
 			// Update item position based on index and scroll offset
-			item.y = index * 90 + this.scrollOffset;
-			item.modified();
+			const newY = index * 90 + this.scrollOffset;
+
+			// Only update if position actually changed
+			if (Math.abs(oldY - newY) >= 1) {
+				item.y = newY;
+				item.modified();
+			}
 		});
 	}
 
@@ -315,7 +347,8 @@ export class TimelineE extends g.E {
 	 */
 	private createTimelineItems(): void {
 		const defaultItems = [
-			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーがシェアした商品を購入できます", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーがシェアした商品を購入できます",
+				reactions: { like: true, comment: true } },
 			{ user: "[ガイド]", action: "💰 アフィリエイト機能で商品をシェアして、購入されるとポイント獲得！", reactions: { like: true, comment: true } },
 			{ user: "[ガイド]", action: "🛒 商品をどんどんシェアして、アフィリエイト報酬を得ましょう！", reactions: { like: true, comment: true } },
 			{ user: "[ガイド]", action: "💹 商品の価格は変化しますが、シェアされた商品はそのときの価格で購入できます", reactions: { like: true, comment: true } },
@@ -357,7 +390,8 @@ export class TimelineE extends g.E {
 		const buyBtnLayout = itemLayout.children!.buyBtn;
 
 		// Check if this is a self-posted item
-		const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
+		const currentPlayerId = this.onGetPlayerId ? this.onGetPlayerId() : null;
+		const isSelfPosted = currentPlayerId && sharedPost.sharerId === currentPlayerId;
 
 		// Create container for the post
 		const postContainer = new g.E({
@@ -442,6 +476,7 @@ export class TimelineE extends g.E {
 		});
 		postContainer.append(priceText);
 
+
 		// Only show buy button for non-self-posted items
 		if (!isSelfPosted) {
 			// Check if player already owns this item
@@ -492,19 +527,22 @@ export class TimelineE extends g.E {
 		// Check for duplicate purchase attempt (button already disabled)
 		const affiliateButton = this.affiliateButtons.get(postId);
 		if (affiliateButton && !affiliateButton.touchable) {
-			console.warn(`Purchase already processed for post: ${postId}`);
+			this.showErrorModal("重複処理エラー", "この商品の購入は既に処理中です。\nしばらくお待ちください。", postId);
 			return;
 		}
 
+		// Get current player ID
+		const currentPlayerId = this.onGetPlayerId ? this.onGetPlayerId() : null;
+
 		// Prevent self-purchases for fairness
-		if (sharedPost.sharerId === this.scene.game.selfId) {
-			console.warn(`Cannot purchase own shared post: ${postId}`);
+		if (currentPlayerId && sharedPost.sharerId === currentPlayerId) {
+			this.showErrorModal("購入不可", "自分の投稿した商品は購入できません。", postId);
 			return;
 		}
 
 		// Check if player already owns this item
 		if (this.onCheckOwnership && this.onCheckOwnership(sharedPost.item.id)) {
-			console.warn(`Player already owns item: ${sharedPost.item.id}`);
+			this.showErrorModal("購入済み", "この商品は既に所持しています。", postId);
 			return;
 		}
 
@@ -543,7 +581,7 @@ export class TimelineE extends g.E {
 
 		const purchaseMessage: AffiliatePurchaseMessage = {
 			postId: postId,
-			buyerId: this.scene.game.selfId ?? DUMMY_ID_FOR_ACTIVE_INSTANCE,
+			buyerId: currentPlayerId ?? DUMMY_ID_FOR_ACTIVE_INSTANCE,
 			buyerName: buyerName,
 			sharerId: sharedPost.sharerId, // Use sharerId instead of sharerName for proper ID comparison
 			rewardPoints: affiliateReward
@@ -566,8 +604,14 @@ export class TimelineE extends g.E {
 			// Note: LabelButtonE setText method might not exist, keeping text as is
 		}
 
+		// Update all buttons for this item (in case multiple posts share the same item)
+		this.updateAllButtonsForItem(sharedPost.item.id);
+
 		// Update purchase count display without destroying children
 		this.updatePurchaseCount(postId);
+
+		// Show success modal consistent with shop purchase behavior
+		this.showSuccessModal(sharedPost.item, sharedPost.sharedPrice);
 	}
 
 	/**
@@ -669,6 +713,44 @@ export class TimelineE extends g.E {
 
 		this.scene.append(modal);
 	}
+
+	/**
+	 * Shows success modal for affiliate purchase (consistent with shop behavior)
+	 */
+	private showSuccessModal(item: ItemData, price: number): void {
+		const successMessage = `アフィリエイト商品を購入しました！\n\n${item.emoji} ${item.name}\n価格: ${price}pt`;
+
+		const modal = new ModalE({
+			scene: this.scene,
+			multi: this.multi,
+			name: `success_modal_${item.id}`,
+			args: null,
+			title: "購入完了",
+			message: successMessage,
+			onClose: () => {
+				// No reactivation needed for success modal
+			}
+		});
+
+		this.scene.append(modal);
+	}
+
+	/**
+	 * Updates all purchase buttons for a specific item ID (when item is purchased from any source)
+	 */
+	private updateAllButtonsForItem(itemId: string): void {
+		this.sharedPosts.forEach(post => {
+			if (post.item.id === itemId) {
+				const button = this.affiliateButtons.get(post.id);
+				if (button) {
+					button.touchable = false;
+					button.setBackgroundColor("#95a5a6"); // Gray color for disabled
+					button.setTextColor("#7f8c8d"); // Darker gray text
+				}
+			}
+		});
+	}
+
 
 	/**
 	 * Updates purchase count display for a specific post without recreating
@@ -778,6 +860,9 @@ export class TimelineE extends g.E {
 	 * Animates the addition of a new post with smooth transitions
 	 */
 	private animateNewPost(): void {
+		// Disable scrolling during animation
+		this.isAnimating = true;
+
 		// Create loading overlay during animation
 		this.createTimelineLoadingOverlay();
 
@@ -810,9 +895,27 @@ export class TimelineE extends g.E {
 					const totalContentHeight = this.timelineItems.length * 90;
 					const containerHeight = this.scrollContainer!.height;
 					this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
+
+					// Fix all item positions after animation to prevent drift
+					this.fixItemPositions();
+
+					// Re-enable scrolling after animation
+					this.isAnimating = false;
+
 					// Animation complete, remove loading overlay
 					this.destroyTimelineLoadingOverlay();
 				});
+		});
+	}
+
+	/**
+	 * Fixes all item positions to their exact calculated values to prevent drift
+	 */
+	private fixItemPositions(): void {
+		this.timelineItems.forEach((item, index) => {
+			const correctY = index * 90 + this.scrollOffset;
+			item.y = correctY;
+			item.modified();
 		});
 	}
 }

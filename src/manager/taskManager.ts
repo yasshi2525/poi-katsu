@@ -1,5 +1,5 @@
 import { GameContext } from "../data/gameContext";
-import { TASK_METADATA } from "../data/taskConstants";
+import { TASK_METADATA, COLLECTION_TASK_METADATA } from "../data/taskConstants";
 import { TaskData } from "../data/taskData";
 import { ModalE } from "../entity/modalE";
 
@@ -17,9 +17,11 @@ export interface TaskExecutionContext {
 	onTimelineReveal: () => void;
 	onShopAppReveal: () => void;
 	onModalCreate: (modal: ModalE<string>) => void;
-	onModalClose: () => void;
+	onModalClose: (taskId?: string) => void;
 	onAchievementShow: (task: TaskData, notificationType?: string) => void;
 	onTaskComplete: (taskId: string) => void;
+	onTaskListRefresh?: () => void;
+	onTaskButtonReactivate?: (taskId: string) => void;
 }
 
 /**
@@ -54,6 +56,18 @@ export class TaskManager {
 		},
 	];
 
+	// Collection tasks - initially hidden, shown after shop unlock
+	private readonly collectionTasks: TaskData[] = [
+		{
+			...COLLECTION_TASK_METADATA.novel_collection,
+			completed: false
+		},
+		{
+			...COLLECTION_TASK_METADATA.manga_collection,
+			completed: false
+		},
+	];
+
 	/**
 	 * Animation configuration constants
 	 */
@@ -78,11 +92,18 @@ export class TaskManager {
 	}
 
 	/**
-	 * Gets all available tasks
+	 * Gets all available tasks (including collection tasks if shop is unlocked)
 	 * @returns Array of task data
 	 */
 	getTasks(): TaskData[] {
-		return [...this.tasks]; // Return copy to prevent external modification
+		const allTasks = [...this.tasks]; // Return copy to prevent external modification
+
+		// Add collection tasks if shop is unlocked
+		if (this.isShopUnlocked()) {
+			allTasks.push(...this.collectionTasks);
+		}
+
+		return allTasks;
 	}
 
 	/**
@@ -91,7 +112,12 @@ export class TaskManager {
 	 * @returns Task data or undefined if not found
 	 */
 	getTask(taskId: string): TaskData | undefined {
-		return this.tasks.find(task => task.id === taskId);
+		// Check basic tasks first
+		const basicTask = this.tasks.find(task => task.id === taskId);
+		if (basicTask) return basicTask;
+
+		// Check collection tasks
+		return this.collectionTasks.find(task => task.id === taskId);
 	}
 
 	/**
@@ -197,25 +223,24 @@ export class TaskManager {
 	}
 
 	/**
-	 * Executes collection task (opens shop app for collection completion)
+	 * Executes collection task (shows collection explanation modal)
 	 */
 	private executeCollectionTask(taskData: TaskData, category: string): TaskExecutionResult {
-		// Open shop app to allow collection completion
-		this.context.onShopAppReveal();
-
-		// Track achievement in GameContext
-		this.context.gameContext.addAchievedTask(taskData.id);
-
-		// Award points immediately and complete task
-		this.context.onScoreAdd(taskData.rewardPoints, taskData);
-		this.context.onTaskComplete(taskData.id);
-		this.context.onAchievementShow(taskData, "collection");
-
+		this.showCollectionModal(taskData, category);
 		return {
 			success: true,
-			message: `${category} collection task completed`,
-			unlockedFeatures: ["collection_bonus"]
+			message: `Collection task modal shown for ${category}`,
+			unlockedFeatures: []
 		};
+	}
+
+	/**
+	 * Checks if shop is unlocked (shopping task completed)
+	 * @returns True if shop is unlocked
+	 */
+	private isShopUnlocked(): boolean {
+		const shoppingTask = this.tasks.find(task => task.id === "shopping");
+		return shoppingTask?.completed ?? false;
 	}
 
 	/**
@@ -236,7 +261,7 @@ export class TaskManager {
 			message: modalMessage,
 			width: 500,
 			height: 300,
-			onClose: () => this.context.onModalClose(),
+			onClose: () => this.context.onModalClose(taskData.id),
 		});
 
 		// Add OK button to modal
@@ -264,7 +289,7 @@ export class TaskManager {
 			message: modalMessage,
 			width: 500,
 			height: 300,
-			onClose: () => this.context.onModalClose(),
+			onClose: () => this.context.onModalClose(taskData.id),
 		});
 
 		// Add OK button to modal
@@ -336,8 +361,73 @@ export class TaskManager {
 			this.context.onShopAppReveal();
 		}, TaskManager.ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
 
+		// Refresh task list to show collection tasks after shop unlock
+		if (this.context.onTaskListRefresh) {
+			this.context.onTaskListRefresh();
+		}
+
 		// Show special shopping achievement notification
 		this.context.onAchievementShow(taskData, "shopping");
+	}
+
+	/**
+	 * Shows modal explaining collection task
+	 */
+	private showCollectionModal(taskData: TaskData, category: string): void {
+		// Close any existing modal first
+		this.context.onModalClose();
+
+		const rewardPoints = taskData.rewardPoints;
+		const categoryName = category === "novel" ? "小説" : "マンガ";
+		const modalMessage = `${categoryName}シリーズをコンプリートしよう！\n\n該当する商品をすべて購入すると${rewardPoints}ポイントの報酬がもらえます。\n\n通販アプリで商品を確認してみましょう。`;
+
+		const modal = new ModalE({
+			scene: this.context.scene,
+			multi: this.context.gameContext.gameMode.mode === "multi",
+			name: `collectionModal_${taskData.id}`,
+			args: taskData.id,
+			title: `${categoryName}コレクション`,
+			message: modalMessage,
+			width: 500,
+			height: 300,
+			onClose: () => {
+				this.context.onModalClose();
+				// Reactivate collection task button to allow multiple views
+				if (this.context.onTaskButtonReactivate) {
+					this.context.onTaskButtonReactivate(taskData.id);
+				}
+			},
+		});
+
+		// Add OK button to modal with reactivate functionality
+		this.addCollectionModalButton(modal, taskData);
+
+		// Notify context to manage modal
+		this.context.onModalCreate(modal);
+	}
+
+	/**
+	 * Adds OK button to collection modal
+	 */
+	private addCollectionModalButton(modal: ModalE<string>, taskData: TaskData): void {
+		modal.replaceCloseButton({
+			text: "了解",
+			backgroundColor: "#9b59b6",
+			textColor: "white",
+			fontSize: 14,
+			width: 80,
+			height: 35,
+			onComplete: () => {
+				// Manual call to onClose logic since replaceCloseButton bypasses the original onClose
+				this.context.onModalClose();
+				// Reactivate collection task button to allow multiple views
+				if (this.context.onTaskButtonReactivate) {
+					this.context.onTaskButtonReactivate(taskData.id);
+				}
+				// Modal closes automatically, no task completion needed
+				// Task will be completed automatically when collection is finished
+			}
+		});
 	}
 
 }

@@ -1,5 +1,5 @@
 import { Timeline } from "@akashic-extension/akashic-timeline";
-import { GameContext, GamePhase } from "../data/gameContext";
+import { GameContext } from "../data/gameContext";
 import {
 	OwnedItem,
 	SetInfo,
@@ -63,17 +63,14 @@ export class SettlementE extends g.E {
 	private setInfos: SetInfo[];
 	private currentModal: ModalE<string> | null = null;
 	private itemConversions: Map<string, ItemConversionE> = new Map();
-	private isAutomaticMode: boolean = false;
-	private isSettlementCompleting: boolean = false;
+	private isShowingFinalScore: boolean = false;
 	private pointManager: PointManager;
-	private transitionToRanking: () => void;
 
 	constructor(param: {
 		scene: g.Scene;
 		gameContext: GameContext;
 		itemManager: ItemManager;
 		pointManager: PointManager;
-		transitionToRanking: () => void;
 	}) {
 		super({
 			scene: param.scene,
@@ -84,7 +81,6 @@ export class SettlementE extends g.E {
 
 		this.gameContext = param.gameContext;
 		this.itemManager = param.itemManager;
-		this.transitionToRanking = param.transitionToRanking;
 		this.ownedItems = [];
 		this.setInfos = [];
 		this.pointManager = param.pointManager;
@@ -139,10 +135,7 @@ export class SettlementE extends g.E {
 			}
 		}
 
-		// Automatically show final score panel after displaying items
-		this.scene.setTimeout(() => {
-			this.showFinalScorePanel();
-		}, SETTLEMENT_CONFIG.CONVERSION_DISPLAY_DELAY);
+		// Show final score panel will be handled by show() method automatically
 	}
 
 	/**
@@ -154,20 +147,12 @@ export class SettlementE extends g.E {
 		this.refreshContent();
 		super.show();
 
-		// If in automatic mode, show final score panel immediately after items are displayed
-		if (this.isAutomaticMode) {
-			this.scene.setTimeout(() => {
-				this.showFinalScorePanel();
-			}, SETTLEMENT_CONFIG.RESULT_DISPLAY_DELAY);
-		}
+		// Always show final score panel after items are displayed
+		this.scene.setTimeout(() => {
+			this.showFinalScorePanel();
+		}, SETTLEMENT_CONFIG.RESULT_DISPLAY_DELAY);
 	}
 
-	/**
-	 * Sets automatic mode for settlement execution
-	 */
-	setAutomaticMode(isAutomatic: boolean): void {
-		this.isAutomaticMode = isAutomatic;
-	}
 
 	/**
 	 * Hides settlement screen
@@ -261,6 +246,12 @@ export class SettlementE extends g.E {
 	 * Shows final score panel automatically without button interaction
 	 */
 	private showFinalScorePanel(): void {
+		// Prevent duplicate execution
+		if (this.isShowingFinalScore) {
+			return;
+		}
+		this.isShowingFinalScore = true;
+
 		const totalValue = calculateTotalSettlementValue(this.setInfos);
 
 		// Execute settlement directly and show result
@@ -278,17 +269,25 @@ export class SettlementE extends g.E {
 		// Convert items to points and clear owned items after settlement
 		const player = this.gameContext.currentPlayer;
 		if (player) {
-			const newScore = player.points + totalValue;
+			// Store item count before clearing
+			const itemCountBeforeSettlement = player.ownedItems.length;
+
+			// Award settlement points through PointManager to create transaction record (only if positive)
+			if (totalValue > 0) {
+				this.pointManager.awardPoints(totalValue, "settlement", "アイテム精算による獲得ポイント");
+			} else {
+				// Still broadcast current score even if no settlement points are awarded
+				this.pointManager.broadcastScore();
+			}
+
+			// Update player to clear items after settlement (preserving the updated score from awardPoints)
+			const currentPlayer = this.gameContext.currentPlayer; // Get updated player data after awardPoints
 			const updatedPlayer = {
-				...player,
-				points: newScore,
+				...currentPlayer,
 				ownedItems: [], // Clear items after settlement
-				preSettlementItemCount: player.ownedItems.length // Store count before clearing
+				preSettlementItemCount: itemCountBeforeSettlement // Store count before clearing
 			};
 			this.gameContext.updateCurrentPlayer(updatedPlayer);
-
-			// Broadcast the new score to other players so they see the settlement value
-			this.pointManager.broadcastScore(newScore);
 		}
 
 		// Show settlement result
@@ -303,43 +302,15 @@ export class SettlementE extends g.E {
 			scene: this.scene,
 			totalValue: totalValue,
 			setInfos: this.setInfos,
-			onComplete: () => this.onSettlementComplete(),
+			onComplete: () => {
+				// Always wait for MainScene timer to handle transition
+			},
 			gameContext: this.gameContext
 		});
 
 		this.append(resultE);
 	}
 
-	/**
-	 * Handles settlement completion
-	 */
-	private onSettlementComplete(): void {
-		// Prevent multiple calls during animation timing conflicts
-		if (this.isSettlementCompleting) {
-			return;
-		}
-		this.isSettlementCompleting = true;
-
-		// Trigger game phase transition to ranking
-		this.gameContext.updateGamePhase(GamePhase.ENDED);
-
-		// Only trigger ranking transition manually if not in automatic mode
-		// In automatic mode, MainScene handles ranking transition with fixed timer
-		if (!this.isAutomaticMode) {
-			// Add delay before ranking scene transition for user to absorb the results
-			this.scene.setTimeout(() => {
-				// Refresh content to show empty state before transitioning
-				this.refreshContent();
-
-				// Transition to ranking scene via callback
-				this.transitionToRanking();
-			}, SETTLEMENT_CONFIG.RANKING_TRANSITION_DELAY);
-		} else {
-			// In automatic mode, just refresh content but don't transition
-			// MainScene will handle the transition with its fixed timer
-			this.refreshContent();
-		}
-	}
 
 	/**
 	 * Closes current modal

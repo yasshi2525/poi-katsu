@@ -19,7 +19,7 @@ const config = {
  * Settlement timing configuration
  */
 const SETTLEMENT_CONFIG = {
-	FIXED_SETTLEMENT_DURATION: 6000, // Fixed 6 seconds for settlement before ranking
+	FIXED_SETTLEMENT_DURATION: 12000, // Fixed 12 seconds for settlement before ranking (doubled from 6 seconds)
 } as const;
 
 export class MainScene extends BaseScene {
@@ -270,9 +270,10 @@ export class MainScene extends BaseScene {
 		this.forceCloseAllModals();
 
 		if (!this.home) {
-			// If HomeE isn't created yet (player still in agreement), directly transition to ranking
-			console.log("HomeE not initialized, directly transitioning to ranking");
-			this.transitionToRanking();
+			// If HomeE isn't created yet (player still in agreement), wait for settlement duration before transitioning
+			this.settlementTimer = this.setTimeout(() => {
+				this.transitionToRanking();
+			}, SETTLEMENT_CONFIG.FIXED_SETTLEMENT_DURATION);
 			return;
 		}
 
@@ -460,8 +461,7 @@ export class MainScene extends BaseScene {
 					gameContext: this.gameContext!,
 					marketManager: this.marketManager!,
 					pointManager: this.pointManager!,
-					updateCurrentPlayerScore: (score: number) => this.updateCurrentPlayerScore(score),
-					transitionToRanking: () => this.transitionToRanking()
+					updateCurrentPlayerScore: (score: number) => this.updateCurrentPlayerScore(score)
 				});
 
 				// Add any pending shared posts that were received before HomeE was created

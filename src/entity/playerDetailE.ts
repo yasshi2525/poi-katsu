@@ -277,7 +277,6 @@ export class PlayerDetailE extends g.E {
 		});
 
 		const completedTasks = this.player.taskProgress?.size || 0;
-		const ownedItems = this.player.preSettlementItemCount ?? (this.player.ownedItems?.length || 0);
 
 		const tasksStat = new g.Label({
 			scene: this.scene,
@@ -290,33 +289,24 @@ export class PlayerDetailE extends g.E {
 			})
 		});
 
-		const itemsStat = new g.Label({
-			scene: this.scene,
-			text: `所持アイテム: ${ownedItems}個`,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: DETAIL_CONFIG.HEADER_COLOR
-			}),
-			y: DETAIL_CONFIG.LINE_HEIGHT
-		});
-
-		const playTimeStat = new g.Label({
-			scene: this.scene,
-			text: "プレイ時間: 未実装", // TODO: Implement play time tracking
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: DETAIL_CONFIG.HEADER_COLOR
-			}),
-			y: DETAIL_CONFIG.LINE_HEIGHT * 2
-		});
+		// Show owned items count only for current player
+		if (this.player.id === this.gameContext.currentPlayer.id) {
+			const ownedItems = this.player.preSettlementItemCount ?? (this.player.ownedItems?.length || 0);
+			const itemsStat = new g.Label({
+				scene: this.scene,
+				text: `所持アイテム: ${ownedItems}個`,
+				font: new g.DynamicFont({
+					game: this.scene.game,
+					fontFamily: "sans-serif",
+					size: 14,
+					fontColor: DETAIL_CONFIG.HEADER_COLOR
+				}),
+				y: DETAIL_CONFIG.LINE_HEIGHT
+			});
+			statsContainer.append(itemsStat);
+		}
 
 		statsContainer.append(tasksStat);
-		statsContainer.append(itemsStat);
-		statsContainer.append(playTimeStat);
 		modal.append(statsContainer);
 
 		return startY + DETAIL_CONFIG.PROFILE_SECTION_HEIGHT + DETAIL_CONFIG.SECTION_SPACING;
@@ -352,56 +342,42 @@ export class PlayerDetailE extends g.E {
 		});
 		modal.append(sectionTitle);
 
-		// Score summary
-		const baseScore = this.player.points; // TODO: Separate base score from bonuses
-		const bonusScore = 0; // TODO: Calculate bonus scores
-
-		const baseScoreLabel = new g.Label({
-			scene: this.scene,
-			text: `基本スコア: ${baseScore}pt`,
-			font: new g.DynamicFont({
-				game: this.scene.game,
+		// Score content (different for current player vs others)
+		if (this.player.id === this.gameContext.currentPlayer.id) {
+			// For current player: show breakdown button
+			this.breakdownButton = new LabelButtonE({
+				scene: this.scene,
+				multi: this.gameContext.gameMode.mode === "multi",
+				text: "内訳表示",
+				fontSize: 14,
 				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: DETAIL_CONFIG.SCORE_COLOR
-			}),
-			x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-			y: startY + 45
-		});
-		modal.append(baseScoreLabel);
-
-		const bonusScoreLabel = new g.Label({
-			scene: this.scene,
-			text: `ボーナス: ${bonusScore}pt`,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: DETAIL_CONFIG.SCORE_COLOR
-			}),
-			x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-			y: startY + 70
-		});
-		modal.append(bonusScoreLabel);
-
-		// Score breakdown button
-		this.breakdownButton = new LabelButtonE({
-			scene: this.scene,
-			multi: this.gameContext.gameMode.mode === "multi",
-			text: "内訳表示",
-			fontSize: 14,
-			fontFamily: "sans-serif",
-			width: 100,
-			height: 30,
-			x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-			y: startY + 100,
-			backgroundColor: "#3498db",
-			textColor: "white",
-			name: `score_breakdown_button_${this.player.id}`,
-			args: "show_breakdown",
-			onComplete: () => this.showScoreBreakdown()
-		});
-		modal.append(this.breakdownButton);
+				width: 100,
+				height: 30,
+				x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
+				y: startY + 45,
+				backgroundColor: "#3498db",
+				textColor: "white",
+				name: `score_breakdown_button_${this.player.id}`,
+				args: "show_breakdown",
+				onComplete: () => this.showScoreBreakdown()
+			});
+			modal.append(this.breakdownButton);
+		} else {
+			// For other players: show "no details available" message
+			const noDetailsLabel = new g.Label({
+				scene: this.scene,
+				text: "詳細情報なし",
+				font: new g.DynamicFont({
+					game: this.scene.game,
+					fontFamily: "sans-serif",
+					size: 14,
+					fontColor: DETAIL_CONFIG.HEADER_COLOR
+				}),
+				x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
+				y: startY + 45
+			});
+			modal.append(noDetailsLabel);
+		}
 
 		return startY + DETAIL_CONFIG.SCORE_SECTION_HEIGHT + DETAIL_CONFIG.SECTION_SPACING;
 	}

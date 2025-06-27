@@ -20,7 +20,7 @@ export interface PointTransaction {
 	/** When the transaction occurred - timestamp in milliseconds */
 	timestamp: number;
 	/** Transaction type */
-	type: "earned" | "spent" | "bonus" | "penalty";
+	type: "earned" | "spent";
 }
 
 /**
@@ -115,21 +115,6 @@ export class PointManager {
 	}
 
 	/**
-	 * Awards bonus points with special handling
-	 * @param amount Bonus points to award
-	 * @param source Source of the bonus
-	 * @param description Detailed description
-	 * @returns Updated player data
-	 */
-	awardBonusPoints(amount: number, source: string, description: string): PlayerData {
-		if (amount <= 0) {
-			throw new Error("Bonus amount must be positive");
-		}
-
-		return this.addPointTransaction(amount, source, description, "bonus", true);
-	}
-
-	/**
 	 * Gets the current player's point balance
 	 */
 	getCurrentPoints(): number {
@@ -159,7 +144,6 @@ export class PointManager {
 	 */
 	getTotalPointsFromSource(source: string): number {
 		return this.getTransactionsBySource(source)
-			.filter(t => t.type === "earned" || t.type === "bonus")
 			.reduce((total, t) => total + t.amount, 0);
 	}
 
@@ -220,7 +204,7 @@ export class PointManager {
 		amount: number,
 		source: string,
 		description: string,
-		type: "earned" | "spent" | "bonus" | "penalty",
+		type: "earned" | "spent",
 		showNotification: boolean
 	): PlayerData {
 		const currentPlayer = this.gameContext.currentPlayer;

@@ -48,6 +48,8 @@ export interface AppListParameterObject extends g.EParameterObject {
 	onSettlementClick?: () => void;
 	/** Callback when settlement app is triggered automatically */
 	onAutomaticSettlementClick?: () => void;
+	/** Callback when shop app is revealed */
+	onShopAppReveal?: () => void;
 }
 
 /**
@@ -59,6 +61,7 @@ export class AppListE extends g.E {
 	private readonly onShopClick?: () => void;
 	private readonly onSettlementClick?: () => void;
 	private readonly onAutomaticSettlementClick?: () => void;
+	private readonly onShopAppReveal?: () => void;
 	private readonly apps: AppConfig[];
 	private shopAppElements: g.E[] = [];
 	private settlementAppElements: g.E[] = [];
@@ -77,6 +80,7 @@ export class AppListE extends g.E {
 		this.onShopClick = options.onShopClick;
 		this.onSettlementClick = options.onSettlementClick;
 		this.onAutomaticSettlementClick = options.onAutomaticSettlementClick;
+		this.onShopAppReveal = options.onShopAppReveal;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 
 		// Initialize apps configuration
@@ -132,6 +136,11 @@ export class AppListE extends g.E {
 				.call(() => {
 					this.highlightShopApp();
 				});
+		}
+
+		// Notify that shop app has been revealed
+		if (this.onShopAppReveal) {
+			this.onShopAppReveal();
 		}
 	}
 

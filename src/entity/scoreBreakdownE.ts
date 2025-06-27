@@ -152,12 +152,7 @@ export class ScoreBreakdownE extends g.E {
 			});
 		}
 
-		// Show total
-		this.scoreItems.push({
-			category: "合計スコア",
-			description: "最終スコア",
-			points: this.player.points,
-		});
+		// Total is shown separately in footer, not in the breakdown list
 	}
 
 	/**
@@ -175,12 +170,14 @@ export class ScoreBreakdownE extends g.E {
 			"affiliate": "アフィリエイト",
 			"shopping": "ショッピング",
 			"join": "サービス参加",
+			"settlement": "アイテム精算",
 			"other": "その他活動"
 		};
 
 		// Convert point summary to breakdown format with Japanese descriptions
 		pointSummary.forEach((points, source) => {
-			if (source !== "tasks" && points > 0) { // Exclude tasks as they're handled separately
+			if (source !== "tasks" && points !== 0) {
+				// Exclude tasks as they're handled separately, but include both positive and negative points
 				breakdown.push({
 					category: sourceDescriptions[source] || source,
 					description: this.getSourceDescription(source),
@@ -210,6 +207,7 @@ export class ScoreBreakdownE extends g.E {
 			"affiliate": "商品シェア・購入コミッション",
 			"shopping": "商品購入による支出",
 			"join": "サービス利用開始ボーナス",
+			"settlement": "所持アイテムのポイント変換",
 			"other": "タイムライン活動等"
 		};
 
@@ -348,7 +346,7 @@ export class ScoreBreakdownE extends g.E {
 			itemY += BREAKDOWN_CONFIG.ITEM_HEIGHT;
 		}
 
-		return startY + BREAKDOWN_CONFIG.SCROLL_AREA_HEIGHT + BREAKDOWN_CONFIG.SECTION_SPACING;
+		return startY + BREAKDOWN_CONFIG.SCROLL_AREA_HEIGHT + BREAKDOWN_CONFIG.SECTION_SPACING - 50;
 	}
 
 	/**

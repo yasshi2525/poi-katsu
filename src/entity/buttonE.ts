@@ -153,6 +153,12 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 		}
 	}
 
+	override destroy(): void {
+		// なんらかの理由で処理中にボタンが破棄されると処理中のオーバーレイが残るため、破棄前に削除
+		this.destroyLoadingOverlay();
+		super.destroy();
+	}
+
 	/**
 	 * Sets up event handlers for button interactions
 	 * Handles point down/up events and message processing

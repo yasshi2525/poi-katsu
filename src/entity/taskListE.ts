@@ -22,6 +22,7 @@ interface TaskItem {
 	container: g.E;
 	background: g.FilledRect;
 	elements: g.E[];
+	executeButton: LabelButtonE<string>;
 }
 
 /**
@@ -117,6 +118,55 @@ export class TaskListE extends g.E {
 
 		// Start fade out animation and removal
 		this.fadeOutAndRemoveTask(taskId);
+	}
+
+	/**
+	 * Reactivates a task button after modal closure
+	 * @param taskId The ID of the task button to reactivate
+	 */
+	reactivateTaskButton(taskId: string): void {
+		const taskItem = this.taskItems.get(taskId);
+		if (taskItem) {
+			taskItem.executeButton.reactivate();
+		}
+	}
+
+	/**
+	 * Refreshes the task list with new tasks from TaskManager
+	 * @param newTasks The updated task list
+	 */
+	refreshTasks(newTasks: TaskData[]): void {
+		// Update internal tasks array
+		this.tasks.length = 0;
+		this.tasks.push(...newTasks);
+
+		// Get currently completed tasks to preserve their state
+		const completedTaskIds = new Set(
+			Array.from(this.taskItems.keys()).filter(taskId => {
+				const taskItem = this.taskItems.get(taskId);
+				return taskItem?.taskData.completed ?? false;
+			})
+		);
+
+		// Find new tasks that weren't in the previous list
+		const existingTaskIds = new Set(Array.from(this.taskItems.keys()));
+		const newTasksToAdd = newTasks.filter(task =>
+			!existingTaskIds.has(task.id) && !task.completed
+		);
+
+		// Add new task items to the display
+		newTasksToAdd.forEach(task => {
+			// Calculate position for new task
+			const activeTasks = this.tasks.filter(t => !t.completed && !completedTaskIds.has(t.id));
+			const index = activeTasks.findIndex(t => t.id === task.id);
+			if (index >= 0) {
+				const taskY = this.layout.y + this.layout.children!.item.y + (index * 60);
+				this.createTaskItem(task, this.layout.children!.item.x, taskY);
+			}
+		});
+
+		// Refresh layout for all active tasks
+		this.refreshTaskLayout();
 	}
 
 	/**
@@ -326,7 +376,8 @@ export class TaskListE extends g.E {
 			taskData: task,
 			container: container,
 			background: taskBg,
-			elements: [iconLabel, titleLabel, rewardLabel, executeBtn]
+			elements: [iconLabel, titleLabel, rewardLabel, executeBtn],
+			executeButton: executeBtn
 		};
 		this.taskItems.set(task.id, taskItem);
 
@@ -338,9 +389,24 @@ export class TaskListE extends g.E {
 	 * @param task The task data for the executed task
 	 */
 	private handleTaskExecute(task: TaskData): void {
-		// Check if there's an external handler for this task (like profile, SNS, or shopping)
-		if (this.onTaskExecute && (task.id === "profile" || task.id === "sns" || task.id === "shopping")) {
+		// Check if there's an external handler for this task (profile, SNS, shopping tasks - complete once)
+		if (this.onTaskExecute && (
+			task.id === "profile" ||
+			task.id === "sns" ||
+			task.id === "shopping"
+		)) {
 			this.onTaskExecute(task);
+			// No reactivate needed - these tasks complete permanently
+			return;
+		}
+
+		// Collection tasks need external handler but with reactivation
+		if (this.onTaskExecute && (
+			task.id === "novel_collection" ||
+			task.id === "manga_collection"
+		)) {
+			this.onTaskExecute(task);
+			// Collection tasks will handle reactivation via TaskManager modal close
 			return;
 		}
 
@@ -369,7 +435,7 @@ export class TaskListE extends g.E {
 			message: modalMessage,
 			width: 450,
 			height: 250,
-			onClose: () => this.closeModal(),
+			onClose: () => this.closeModalWithReactivation(task.id),
 		});
 
 		// Add execute confirmation button to modal
@@ -490,6 +556,15 @@ export class TaskListE extends g.E {
 	}
 
 	/**
+	 * Closes the current modal dialog and reactivates the task button
+	 * @param taskId The ID of the task whose button should be reactivated
+	 */
+	private closeModalWithReactivation(taskId: string): void {
+		this.closeModal();
+		this.reactivateTaskButton(taskId);
+	}
+
+	/**
 	 * Fades out and removes a completed task
 	 * @param taskId The ID of the task to remove
 	 */
@@ -550,6 +625,7 @@ export class TaskListE extends g.E {
 			}
 		});
 	}
+
 
 	/**
 	 * Animates a task item to a new Y position with smooth transition
