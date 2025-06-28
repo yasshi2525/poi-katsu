@@ -91,13 +91,13 @@ export class RadioButtonGroupE extends g.E {
 
 		const previousSelectedId = this.selectedId;
 		this.selectedId = optionId;
-		this.updateButtonStates();
 
 		// Only reactivate the previously selected button to allow it to be clicked again
 		// This prevents race conditions in multi mode while maintaining proper UX
 		if (previousSelectedId) {
 			this.reactivateButton(previousSelectedId);
 		}
+		this.updateButtonStates();
 
 		this.onSelectionChange(optionId, option.value);
 	}
@@ -108,7 +108,7 @@ export class RadioButtonGroupE extends g.E {
 	private createRadioButtons(): void {
 		this.options.forEach((option, index) => {
 			const isSelected = this.selectedId === option.id;
-			const buttonY = index * (this.buttonHeight + this.spacing);
+			const buttonX = index * (this.buttonWidth + this.spacing);
 
 			const button = new LabelButtonE<string>({
 				scene: this.scene,
@@ -117,12 +117,12 @@ export class RadioButtonGroupE extends g.E {
 				args: option.id,
 				width: this.buttonWidth,
 				height: this.buttonHeight,
-				x: 0,
-				y: buttonY,
+				x: buttonX,
+				y: 0,
 				text: option.label,
-				backgroundColor: isSelected ? "#3498db" : "#95a5a6",
+				backgroundColor: isSelected ? "#689f38" : "#95a5a6",
 				textColor: "white",
-				fontSize: 14,
+				fontSize: 36,
 				onComplete: (optionId: string) => this.setSelectedId(optionId),
 			});
 
@@ -139,7 +139,7 @@ export class RadioButtonGroupE extends g.E {
 			const isSelected = this.selectedId === optionId;
 			// Update button background color to reflect selection state
 			const background = button.children![0] as g.FilledRect;
-			background.cssColor = isSelected ? "#3498db" : "#95a5a6";
+			background.cssColor = isSelected ? "#689f38" : "#95a5a6";
 			background.modified();
 		});
 	}

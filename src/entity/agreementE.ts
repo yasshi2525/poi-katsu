@@ -65,10 +65,8 @@ export class AgreementE extends g.E {
 	private createAgreementText(): string {
 		return `本サービスは、ポイント活動を通じてポイントを獲得するサービスです。
 以下の活動でポイントが獲得できます：
-• SNS連携・いいね • 広告タップ
-• 通販での商品購入 • アフィリエイト
-• フリマでの売買
-サービスを利用することで、他のプレイヤーと競ってポイントを稼ぐことができます。利用を開始しますか？`;
+• SNS連携・広告タップ • 通販での商品購入 • アフィリエイト
+サービスを利用することで、他のプレイヤーと競ってポイントを稼ぐことができます。`;
 	}
 
 	/**
@@ -85,7 +83,7 @@ export class AgreementE extends g.E {
 			title: "サービス利用開始",
 			message: this.agreementText,
 			width: checkBoxAsset.width / 2 + 200, // Adjust width to fit checkbox and text
-			height: 400,
+			height: 520,
 			onClose: () => {
 				this.handleAgreement();
 			}
@@ -93,7 +91,7 @@ export class AgreementE extends g.E {
 
 		this.modal.overlay.touchable = false; // Force user to interact with modal content
 		this.modal.closeButton.touchable = false; // Without agreement, close button is disabled
-		this.modal.closeButton.setTextColor("gray"); // Change close button text color to indicate it's disabled
+		this.modal.closeButton.setBackgroundColor("#616161"); // Change close button color to indicate it's disabled
 
 		this.checkBox = new CheckBoxE({
 			scene: this.scene,
@@ -101,17 +99,18 @@ export class AgreementE extends g.E {
 			name: "agreement-checkbox",
 			imageAsset: checkBoxAsset,
 			x: this.modal.content.width / 2,
-			y: this.modal.content.height * 0.75,
+			y: this.modal.content.height - 150,
 			anchorX: 0.5,
-			anchorY: 0.5,
+			anchorY: 1,
 			onChange: (checked) => {
 				// Enable close button when checkbox is checked
 				if (checked) {
 					this.modal.closeButton.touchable = true;
-					this.modal.closeButton.setTextColor("black"); // Change text color back to normal
+					this.modal.closeButton.setBackgroundColor("#0288d1");  // Change button color back to normal
+					this.modal.closeButton.setTextColor("white");
 				} else {
 					this.modal.closeButton.touchable = false;
-					this.modal.closeButton.setTextColor("gray"); // Disable text color
+					this.modal.closeButton.setBackgroundColor("#616161"); // Disable button color
 				}
 			}
 		});
@@ -151,14 +150,10 @@ export class AgreementE extends g.E {
 			args: undefined,
 			title: "ようこそ！",
 			message: `ポイ活サービスへようこそ！
-
-初回登録ボーナスとして
-${POINT_CONSTANTS.TASK_AGREEMENT_REWARD}ポイントを獲得しました！
-
-ホーム画面から様々な機能を
-利用してポイントを稼ぎましょう！`,
+初回登録ボーナスとして${POINT_CONSTANTS.TASK_AGREEMENT_REWARD}ポイントを獲得しました！
+ホーム画面から様々な機能を利用してポイントを稼ぎましょう！`,
 			width: 450,
-			height: 300,
+			height: 400,
 			onClose: () => {
 				// Complete the initial task
 				this.completeTask();

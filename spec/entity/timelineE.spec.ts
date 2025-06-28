@@ -231,12 +231,12 @@ describe("TimelineE", () => {
 	});
 
 	describe("Affiliate Reward Calculation", () => {
-		it("should calculate correct 10% reward", () => {
+		it("should calculate correct 100% reward", () => {
 			const testCases = [
-				{ price: 100, expectedReward: 10 },
-				{ price: 250, expectedReward: 25 },
-				{ price: 99, expectedReward: 9 }, // Floor rounding
-				{ price: 1, expectedReward: 0 }, // Floor rounding
+				{ price: 100, expectedReward: 100 },
+				{ price: 250, expectedReward: 250 },
+				{ price: 99, expectedReward: 99 }, // Floor rounding
+				{ price: 1, expectedReward: 1 }, // Floor rounding
 			];
 
 			testCases.forEach(({ price, expectedReward }) => {
@@ -283,7 +283,7 @@ describe("TimelineE", () => {
 
 		it("should use configured reward rate", () => {
 			// Verify it's using the config constant
-			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(0.1);
+			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(1);
 
 			const price = 500;
 			const expectedReward = Math.floor(price * AFFILIATE_CONFIG.REWARD_RATE);

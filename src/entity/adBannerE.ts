@@ -1,3 +1,4 @@
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 
 /**
@@ -179,7 +180,7 @@ export class AdBannerE extends g.E {
 			x: 20, // Match TaskListE item margin for left block alignment
 			y: 149, // Below header(69) + item list(60) + margin(20) = 149
 			width: screenWidth - 760, // Match TaskListE item width (with margins)
-			height: 120,
+			height: 80,
 			children: {
 				saleTag: {
 					x: screenWidth - 880, // Adjusted for new width (screenWidth - 760 - 120 = screenWidth - 880)
@@ -190,8 +191,8 @@ export class AdBannerE extends g.E {
 						label: { x: 5, y: 5, width: 110, height: 20 }
 					}
 				},
-				title: { x: 20, y: 30, width: 300, height: 24 },
-				subtitle: { x: 20, y: 65, width: 300, height: 16 }
+				title: { x: 20, y: 10, width: 300, height: 24 },
+				subtitle: { x: 20, y: 45, width: 300, height: 16 }
 			}
 		};
 	}
@@ -256,13 +257,14 @@ export class AdBannerE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				size: 16,
 				fontColor: "white",
 			}),
 			text: banner.saleTag,
 			x: saleTagLayout.x + saleTagLayout.children!.label.x,
 			y: saleTagLayout.y + saleTagLayout.children!.label.y,
 		});
+		adjustLabelWidthToFit(saleLabel, saleTag.width - 10);
 		container.append(saleLabel);
 
 		// Banner title

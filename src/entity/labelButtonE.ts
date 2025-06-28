@@ -1,3 +1,4 @@
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { ButtonE, ButtonEParameterObject } from "./buttonE";
 
 /**
@@ -7,11 +8,11 @@ import { ButtonE, ButtonEParameterObject } from "./buttonE";
 export interface LabelButtonEParameterObject<T> extends ButtonEParameterObject<T> {
 	/** Text to display on the button */
 	text: string;
-	/** Background color of the button (default: "#4A90E2") */
+	/** Background color of the button (default: "#0288d1") */
 	backgroundColor?: string;
 	/** Text color of the button (default: "white") */
 	textColor?: string;
-	/** Font size for the button text (default: 16) */
+	/** Font size for the button text (default: 48) */
 	fontSize?: number;
 	/** Font family for the button text (default: "sans-serif") */
 	fontFamily?: string;
@@ -37,6 +38,14 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 		this.options = options;
 	}
 
+	override reactivate(): void {
+		super.reactivate();
+		this.background.cssColor = this.options.backgroundColor || "#0288d1";
+		this.background.modified();
+		this.label.opacity = 1;
+		this.label.invalidate();
+	}
+
 	/**
 	 * Creates and initializes the visual elements (background and text label)
 	 * Sets up the filled rectangle background and text label with proper positioning
@@ -44,7 +53,7 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 	protected createVisualElements(options: LabelButtonEParameterObject<T>): void {
 		this.background = new g.FilledRect({
 			scene: this.scene,
-			cssColor: options.backgroundColor || "#4A90E2",
+			cssColor: options.backgroundColor || "#0288d1",
 			width: this.width,
 			height: this.height
 		});
@@ -53,18 +62,21 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 		this.font = new g.DynamicFont({
 			game: this.scene.game,
 			fontFamily: options.fontFamily || "sans-serif",
-			size: options.fontSize || 16
+			size: options.fontSize || 48
 		});
 
 		this.label = new g.Label({
 			scene: this.scene,
 			text: options.text,
 			font: this.font,
-			fontSize: options.fontSize || 16,
+			fontSize: options.fontSize || 48,
 			textColor: options.textColor || "white",
-			x: (this.width - options.text.length * (options.fontSize || 16) * 0.6) / 2,
-			y: (this.height - (options.fontSize || 16)) / 2
+			x: this.width / 2,
+			y: this.height / 2,
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
+		adjustLabelWidthToFit(this.label, this.width - 10);
 		this.append(this.label);
 	}
 
@@ -74,32 +86,29 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 	 * @param pressed Whether the button is currently pressed
 	 */
 	protected onPressedStateChange(pressed: boolean): void {
-		const normalColor = this.options.backgroundColor || "#4A90E2";
-		const pressedColor = "#357ABD";
-
-		this.background.cssColor = pressed ? pressedColor : normalColor;
+		this.background.opacity = pressed ? 0.7 : 1;
 		this.background.modified();
 	}
 
 	/**
 	 * Handles visual changes when button sync state changes
-	 * Changes colors to indicate sending (orange) and received (green) states
+	 * Changes colors to indicate sending (darken) and received (light darken) states
 	 * @param state Current sync state ("sending" or "received")
 	 */
 	protected onSyncStateChange(state: "sending" | "received"): void {
-		const sendingColor = "#FFA500"; // Orange for sending state
-		const receivedColor = "#28A745"; // Green for received state
+		const sendingColor = "#9e9e9e"; // light gray for sending state
+		const receivedColor = "#616161"; // gray for received state
 
 		if (state === "sending") {
 			this.background.cssColor = sendingColor;
-			this.label.textColor = "white";
+			this.label.opacity = 0.3;
 		} else if (state === "received") {
 			this.background.cssColor = receivedColor;
-			this.label.textColor = "white";
+			this.label.opacity = 0.7;
 		}
 
 		this.background.modified();
-		this.label.invalidate();
+		this.label.modified();
 	}
 
 	/**
@@ -110,9 +119,6 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 	setText(text: string): void {
 		this.label.text = text;
 		this.label.invalidate();
-
-		this.label.x = (this.width - text.length * (this.options.fontSize || 16) * 0.6) / 2;
-		this.label.modified();
 	}
 
 	/**

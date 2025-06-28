@@ -267,6 +267,17 @@
 			"path": "image/coin-front.png",
 			"width": 100,
 			"height": 100
+		},
+		"labelUtils": {
+			"type": "script",
+			"path": "script/util/labelUtils.js",
+			"global": true
+		},
+		"icon": {
+			"type": "image",
+			"path": "image/icon.png",
+			"width": 320,
+			"height": 320
 		}
 	},
 	"environment": {

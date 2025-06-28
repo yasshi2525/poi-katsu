@@ -1,5 +1,6 @@
 import { resolvePlayerInfo } from "@akashic-extension/resolve-player-info";
 import { GameContext } from "../data/gameContext";
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 import { RadioButtonGroupE, RadioButtonOption } from "./radioButtonGroupE";
 
@@ -87,6 +88,7 @@ export class ProfileEditorE extends g.E {
 		if (this.nameButtonText) {
 			this.nameButtonText.text = playerName;
 			this.nameButtonText.invalidate();
+			adjustLabelWidthToFit(this.nameButtonText, 384 - 20);
 		}
 	}
 
@@ -117,9 +119,9 @@ export class ProfileEditorE extends g.E {
 		const background = new g.FilledRect({
 			scene: this.scene,
 			width: this.screenWidth,
-			height: this.screenHeight,
+			height: this.screenHeight - 69, // Subtract HeaderE height
 			x: 0,
-			y: 0,
+			y: 69, // HeaderE height
 			cssColor: "#2c3e50",
 		});
 		this.append(background);
@@ -130,12 +132,12 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 48,
 				fontColor: "white",
 			}),
 			text: "プロフィール設定",
 			x: 50,
-			y: 50,
+			y: 69, // + HeaderE height
 		});
 		this.append(titleLabel);
 
@@ -162,36 +164,47 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: "名前",
 			x: 50,
-			y: 120,
+			y: 60 + 69, // + HeaderE height
 		});
 		this.append(nameLabel);
 
 		// Name setting button background (touchable)
 		const nameButtonBg = new g.FilledRect({
 			scene: this.scene,
-			width: 200,
-			height: 40,
+			width: 216 + 16 + 216,
+			height: 80,
 			x: 50,
-			y: 150,
-			cssColor: "#34495e",
+			y: 110 + 69, // + HeaderE height
+			cssColor: "#689f38",
 			touchable: true,
 			local: true,
 		});
 		nameButtonBg.onPointDown.add(() => {
+			// NOTE: F5 するとボタンが再活性化してしまうが、費用対効果を考え対策しないこととした
+			nameButtonBg.touchable = false; // Disable button to prevent multiple clicks
+			nameButtonBg.cssColor = "#9e9e9e"; // Change color to indicate it's pressed
+			nameButtonBg.modified();
+			nameLabel.opacity = 0.3;
+			nameLabel.modified();
 			if (this.gameContext.gameMode.mode === "multi") {
 				// In multi mode, resolvePlayerInfo will trigger onPlayerInfo event
 				resolvePlayerInfo({}, (_, playerInfo) => {
+					nameButtonBg.cssColor = "#616161";
+					nameButtonBg.modified();
+					nameLabel.opacity = 0.7;
+					nameLabel.modified();
 					if (playerInfo?.name) {
 						this.gameContext.currentPlayer.profile.name = playerInfo.name;
 						// Update the name button text to show the new name
 						this.updateNameButtonText(playerInfo.name);
 						// Broadcast the updated profile to other participants
 						this.broadcastProfile();
+						// NOTE: F5 すると名前の変更が自分の端末だけリセットされる。費用対効果を考え対策しないこととした
 						// Notify parent component of profile change
 						if (this.onProfileChange) {
 							this.onProfileChange();
@@ -208,12 +221,14 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: "名前を設定する",
-			x: 50 + 10,
-			y: 150 + 12,
+			x: nameButtonBg.x + nameButtonBg.width / 2,
+			y: 110 + 40 + 69, // + HeaderE height
+			anchorX: 0.5,
+			anchorY: 0.5,
 		});
 		this.append(this.nameButtonText);
 	}
@@ -228,22 +243,22 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: "アバター",
 			x: 50,
-			y: 220,
+			y: 190 + 69, // + HeaderE height
 		});
 		this.append(avatarLabel);
 
 		// Avatar options
 		const avatarOptions: RadioButtonOption[] = [
-			{ id: "avatar1", label: "😀 笑顔", value: "😀" },
-			{ id: "avatar2", label: "😎 クール", value: "😎" },
-			{ id: "avatar3", label: "🥰 可愛い", value: "🥰" },
-			{ id: "avatar4", label: "🤔 考え中", value: "🤔" },
-			{ id: "avatar5", label: "😴 眠い", value: "😴" },
+			{ id: "avatar1", label: "笑顔", value: "😀" },
+			{ id: "avatar2", label: "クール", value: "😎" },
+			{ id: "avatar3", label: "可愛い", value: "🥰" },
+			{ id: "avatar4", label: "考え中", value: "🤔" },
+			{ id: "avatar5", label: "眠い", value: "😴" },
 		];
 
 		// Create avatar radio button group
@@ -251,12 +266,12 @@ export class ProfileEditorE extends g.E {
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			x: 50,
-			y: 250,
+			y: 240 + 69, // + HeaderE height
 			options: avatarOptions,
 			selectedId: "avatar1", // Default selection
-			buttonWidth: 150,
-			buttonHeight: 35,
-			spacing: 10,
+			buttonWidth: 216,
+			buttonHeight: 80,
+			spacing: 16,
 			onSelectionChange: (selectedId: string, selectedValue: string) => {
 				this.selectedAvatarId = selectedId;
 				// Update gameVars directly when avatar is selected
@@ -286,26 +301,26 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: "サービス連携",
 			x: 50,
-			y: 420,
+			y: 320 + 69, // + HeaderE height
 		});
 		this.append(connectionLabel);
 
 		// SNS connection status
-		this.createConnectionItem("SNS", "sns", 450);
+		this.createConnectionItem("SNS", "sns", 50);
 
 		// Shopping connection status
-		this.createConnectionItem("通販", "shopping", 490);
+		this.createConnectionItem("通販", "shopping", 50 + (216 + 16) * 2);
 	}
 
 	/**
 	 * Creates a single connection status item
 	 */
-	private createConnectionItem(serviceName: string, taskId: string, yPosition: number): void {
+	private createConnectionItem(serviceName: string, taskId: string, xPosition: number): void {
 		const isConnected = this.gameContext.hasAchievedTask(taskId);
 
 		// Service name label
@@ -314,12 +329,14 @@ export class ProfileEditorE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: `${serviceName}：`,
-			x: 50,
-			y: yPosition + 5,
+			x: xPosition + 216 / 2,
+			y: 370 + 40 + 69, // + HeaderE height
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		this.append(serviceLabel);
 
@@ -330,12 +347,14 @@ export class ProfileEditorE extends g.E {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 14,
+					size: 36,
 					fontColor: "#27ae60",
 				}),
 				text: "接続済み ✓",
-				x: 120,
-				y: yPosition + 5,
+				x: xPosition + 216 + 16 + 216 / 2,
+				y: 370 + 40 + 69, // + HeaderE height
+				anchorX: 0.5,
+				anchorY: 0.5
 			});
 			this.append(statusLabel);
 		} else {
@@ -345,14 +364,14 @@ export class ProfileEditorE extends g.E {
 				multi: this.gameContext.gameMode.mode === "multi",
 				name: `connect${serviceName}Button`,
 				args: taskId,
-				width: 80,
-				height: 30,
-				x: 120,
-				y: yPosition,
+				width: 216,
+				height: 80,
+				x: xPosition + 216 + 16,
+				y: 370 + 69, // + HeaderE height
 				text: "接続",
-				backgroundColor: "#3498db",
+				backgroundColor: "#689f38",
 				textColor: "white",
-				fontSize: 12,
+				fontSize: 36,
 				onComplete: (taskId: string) => this.handleConnectionRequest(taskId),
 			});
 			this.append(connectButton);
@@ -379,14 +398,12 @@ export class ProfileEditorE extends g.E {
 			multi: this.gameContext.gameMode.mode === "multi",
 			name: "submitProfileButton",
 			args: "submit",
-			width: 120,
-			height: 50,
-			x: 50,
-			y: 540, // Moved down to accommodate connection section
+			width: 240,
+			height: 120,
+			x: this.width / 2,
+			y: 480 + 69, // + HeaderE height
+			anchorX: 0.5,
 			text: "完了",
-			backgroundColor: "#27ae60",
-			textColor: "white",
-			fontSize: 16,
 			onComplete: () => this.handleSubmit(),
 		});
 		this.append(submitButton);

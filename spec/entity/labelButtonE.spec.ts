@@ -74,9 +74,9 @@ describe("LabelButtonE", () => {
 			const background = button.children![0] as g.FilledRect;
 			const label = button.children![1] as g.Label;
 
-			expect(background.cssColor).toBe("#4A90E2"); // Default blue
+			expect(background.cssColor).toBe("#0288d1"); // Default blue (updated)
 			expect(label.textColor).toBe("white"); // Default white text
-			expect(label.fontSize).toBe(16); // Default font size
+			expect(label.fontSize).toBe(48); // Default font size (updated)
 		});
 	});
 
@@ -96,9 +96,10 @@ describe("LabelButtonE", () => {
 			button = new LabelButtonE(options);
 		});
 
-		it("should change background color when pressed", () => {
+		it("should change background opacity when pressed", () => {
 			const background = button.children![0] as g.FilledRect;
 			expect(background.cssColor).toBe("#4A90E2"); // Normal state
+			expect(background.opacity).toBe(1); // Normal opacity
 
 			// Simulate press
 			button.onPointDown.fire({
@@ -109,10 +110,10 @@ describe("LabelButtonE", () => {
 				type: "down",
 			} as any);
 
-			expect(background.cssColor).toBe("#357ABD"); // Pressed state (darker)
+			expect(background.opacity).toBe(0.7); // Pressed state (reduced opacity)
 		});
 
-		it("should revert background color when released", () => {
+		it("should revert background opacity when released", () => {
 			const background = button.children![0] as g.FilledRect;
 
 			// Just test press and release without triggering send
@@ -124,13 +125,13 @@ describe("LabelButtonE", () => {
 				type: "down",
 			} as any);
 
-			expect(background.cssColor).toBe("#357ABD"); // Pressed state
+			expect(background.opacity).toBe(0.7); // Pressed state
 
 			// Manually trigger pressed state change to false (simulating release without send)
 			(button as any).pressed = false;
 			(button as any).onPressedStateChange(false);
 
-			expect(background.cssColor).toBe("#4A90E2"); // Back to normal
+			expect(background.opacity).toBe(1); // Back to normal
 		});
 
 		it("should change colors during sync states", () => {
@@ -140,9 +141,9 @@ describe("LabelButtonE", () => {
 			// Trigger sending state (though in single player it goes straight to received)
 			button.send();
 
-			// Should show received state (green)
-			expect(background.cssColor).toBe("#28A745");
-			expect(label.textColor).toBe("white");
+			// Should show received state (gray)
+			expect(background.cssColor).toBe("#616161");
+			expect(label.opacity).toBe(0.7);
 		});
 	});
 
@@ -161,9 +162,10 @@ describe("LabelButtonE", () => {
 			button = new LabelButtonE(options);
 			const label = button.children![1] as g.Label;
 
-			// Text positioning calculation: (width - text.length * fontSize * 0.6) / 2
-			const expectedX = (200 - 4 * 16 * 0.6) / 2; // 80.8
+			// Text is now centered using anchorX: 0.5
+			const expectedX = 200 / 2; // 100 (center of button)
 			expect(label.x).toBe(expectedX);
+			expect(label.anchorX).toBe(0.5);
 		});
 
 		it("should center text vertically", () => {
@@ -180,9 +182,10 @@ describe("LabelButtonE", () => {
 			button = new LabelButtonE(options);
 			const label = button.children![1] as g.Label;
 
-			// Vertical centering: (height - fontSize) / 2
-			const expectedY = (60 - 20) / 2; // 20
+			// Text is now centered using anchorY: 0.5
+			const expectedY = 60 / 2; // 30 (center of button)
 			expect(label.y).toBe(expectedY);
+			expect(label.anchorY).toBe(0.5);
 		});
 	});
 
@@ -209,7 +212,8 @@ describe("LabelButtonE", () => {
 			button.setText("Much Longer Text That Will Change Position");
 
 			expect(label.text).toBe("Much Longer Text That Will Change Position");
-			expect(label.x).not.toBe(originalX); // Should be repositioned due to different length
+			// With anchored positioning, x position remains the same (center of button)
+			expect(label.x).toBe(originalX);
 		});
 
 		it("should update background color", () => {

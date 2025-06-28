@@ -85,11 +85,11 @@ export class AppListE extends g.E {
 
 		// Initialize apps configuration
 		this.apps = [
-			{ icon: "👤", name: "プロフィール", color: "#3498db", visible: true },
-			{ icon: "🛒", name: "通販", color: "#2980b9", visible: false }, // Initially hidden
+			{ icon: "👤", name: "プロフィール", color: "#00796b", visible: true },
+			{ icon: "🛒", name: "通販", color: "#00796b", visible: false }, // Initially hidden
 			// { icon: "🎮", name: "ソシャゲ", color: "#e74c3c", badge: "1", visible: true }, // Not implemented yet
 			// { icon: "🛍️", name: "フリマ", color: "#7f8c8d", visible: true }, // Not implemented yet
-			{ icon: "💰", name: "精算", color: "#8e44ad", visible: false }, // Initially hidden
+			{ icon: "💰", name: "精算", color: "#00796b", visible: false }, // Initially hidden
 		];
 
 		this.createLayout();
@@ -257,22 +257,22 @@ export class AppListE extends g.E {
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
 			x: 20, // Match TaskListE item margin
-			y: screenHeight - 100, // Position at screen bottom
+			y: screenHeight - 120 - 20, // Position at screen bottom
 			width: screenWidth - 760, // Match TaskListE item width (with margins)
-			height: 100,
+			height: 120,
 			children: {
-				title: { x: 20, y: -25, width: 100, height: 16 },
+				title: { x: 0, y: -25, width: 100, height: 16 },
 				icon: {
 					x: 60,
 					y: 10,
-					width: 60,
-					height: 60,
+					width: 80,
+					height: 80,
 					children: {
-						background: { x: 0, y: 0, width: 60, height: 60 },
-						iconLabel: { x: 18, y: 18, width: 24, height: 24 },
-						badge: { x: 50, y: -5, width: 20, height: 20 },
-						badgeLabel: { x: 56, y: 0, width: 8, height: 12 },
-						nameLabel: { x: 10, y: 70, width: 40, height: 12 }
+						background: { x: 0, y: 0, width: 80, height: 80 },
+						iconLabel: { x: 40, y: 40, width: 0, height: 0 },
+						badge: { x: 50, y: -5, width: 20, height: 20 }, // un-tuned
+						badgeLabel: { x: 56, y: 0, width: 8, height: 12 }, // un-tuned
+						nameLabel: { x: 40, y: 90, width: 0, height: 0 }
 					}
 				}
 			}
@@ -310,7 +310,7 @@ export class AppListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 24,
 				fontColor: "white",
 			}),
 			text: "アプリ",
@@ -400,11 +400,13 @@ export class AppListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 48,
 			}),
 			text: app.icon,
 			x: x + iconLabelLayout.x,
 			y: y + iconLabelLayout.y,
+			anchorX: 0.5, // Center align
+			anchorY: 0.5, // Center align
 		});
 		appContainer.append(iconLabel);
 
@@ -441,12 +443,13 @@ export class AppListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				size: 24,
 				fontColor: "white",
 			}),
 			text: app.name,
 			x: x + nameLabelLayout.x,
 			y: y + nameLabelLayout.y,
+			anchorX: 0.5, // Center align
 		});
 		appContainer.append(nameLabel);
 

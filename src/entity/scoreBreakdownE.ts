@@ -3,6 +3,7 @@ import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
 import { getAllTaskMetadata } from "../data/taskConstants";
 import { PointManager } from "../manager/pointManager";
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 
 /**
@@ -11,7 +12,7 @@ import { LabelButtonE } from "./labelButtonE";
 const BREAKDOWN_CONFIG = {
 	// Modal constants
 	MODAL_WIDTH: 500,
-	MODAL_HEIGHT: 400,
+	MODAL_HEIGHT: 485,
 	CONTENT_MARGIN: 20,
 	SECTION_SPACING: 25,
 	LINE_HEIGHT: 22,
@@ -21,8 +22,8 @@ const BREAKDOWN_CONFIG = {
 	ITEM_HEIGHT: 25,
 
 	// Button constants
-	BUTTON_WIDTH: 100,
-	BUTTON_HEIGHT: 35,
+	BUTTON_WIDTH: 180,
+	BUTTON_HEIGHT: 120,
 
 	// Colors
 	BACKGROUND_COLOR: "white",
@@ -287,7 +288,7 @@ export class ScoreBreakdownE extends g.E {
 	 * Adds header section
 	 */
 	private addHeader(modal: g.E, startY: number): number {
-		// Title
+		// Title with width adjustment
 		const title = new g.Label({
 			scene: this.scene,
 			text: `${this.player.profile.name} - スコア内訳`,
@@ -300,6 +301,9 @@ export class ScoreBreakdownE extends g.E {
 			x: BREAKDOWN_CONFIG.CONTENT_MARGIN,
 			y: startY
 		});
+		// Adjust title width to fit within modal
+		const maxTitleWidth = BREAKDOWN_CONFIG.MODAL_WIDTH - BREAKDOWN_CONFIG.CONTENT_MARGIN * 2;
+		adjustLabelWidthToFit(title, maxTitleWidth);
 		modal.append(title);
 
 		// Subtitle
@@ -452,14 +456,11 @@ export class ScoreBreakdownE extends g.E {
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			text: "閉じる",
-			fontSize: 14,
 			fontFamily: "sans-serif",
 			width: BREAKDOWN_CONFIG.BUTTON_WIDTH,
 			height: BREAKDOWN_CONFIG.BUTTON_HEIGHT,
 			x: BREAKDOWN_CONFIG.MODAL_WIDTH - BREAKDOWN_CONFIG.BUTTON_WIDTH - BREAKDOWN_CONFIG.CONTENT_MARGIN,
 			y: startY + 10,
-			backgroundColor: "#95a5a6",
-			textColor: "white",
 			name: `score_breakdown_close_button_${this.player.id}`,
 			args: "close_breakdown",
 			onComplete: () => this.handleClose()

@@ -79,13 +79,13 @@ export class ItemListE extends g.E {
 			height: screenHeight,
 			children: {
 				header: {
-					x: 10,
+					x: 20,
 					y: 5,
-					width: 120,
+					width: 140,
 					height: 20
 				},
 				content: {
-					x: 140, // Start after header text
+					x: 180, // Start after header text
 					y: 5,
 					width: screenWidth - 150,
 					height: screenHeight - 10
@@ -125,7 +125,7 @@ export class ItemListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 24,
 				fontColor: "#2c3e50",
 				fontWeight: "bold"
 			}),
@@ -150,7 +150,7 @@ export class ItemListE extends g.E {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 12,
+					size: 24,
 					fontColor: "#7f8c8d"
 				}),
 				text: "なし",
@@ -184,7 +184,7 @@ export class ItemListE extends g.E {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 10,
+					size: 24,
 					fontColor: "#7f8c8d"
 				}),
 				text: `+${ownedItems.length - maxDisplayableItems}個`,
@@ -217,28 +217,18 @@ export class ItemListE extends g.E {
 		});
 		this.itemContainer.append(cardBg);
 
-		// Card border
-		const cardBorder = new g.FilledRect({
-			scene: this.scene,
-			width: width,
-			height: 2,
-			x: x,
-			y: y + height - 2,
-			cssColor: "#3498db",
-		});
-		this.itemContainer.append(cardBorder);
-
 		// Item emoji (centered)
 		const itemEmoji = new g.Label({
 			scene: this.scene,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 24,
 			}),
 			text: ownedItem.item.emoji,
-			x: x + (width - 16) / 2,
-			y: y + 5,
+			x: x + width / 2,
+			y: y,
+			anchorX: 0.5
 		});
 		this.itemContainer.append(itemEmoji);
 
@@ -248,12 +238,13 @@ export class ItemListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 8,
+				size: 24,
 				fontColor: "#7f8c8d",
 			}),
 			text: `${ownedItem.item.seriesNumber}`,
-			x: x + (width - 8) / 2,
+			x: x + width / 2,
 			y: y + 25,
+			anchorX: 0.5
 		});
 		this.itemContainer.append(seriesText);
 	}

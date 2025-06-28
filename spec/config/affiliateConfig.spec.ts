@@ -11,7 +11,7 @@ describe("AFFILIATE_CONFIG", () => {
 		});
 
 		it("should have correct reward rate", () => {
-			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(0.1);
+			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(1);
 			expect(typeof AFFILIATE_CONFIG.REWARD_RATE).toBe("number");
 		});
 
@@ -51,7 +51,7 @@ describe("AFFILIATE_CONFIG", () => {
 			// The 'as const' assertion makes TypeScript treat this as readonly
 			// but doesn't freeze the object at runtime - that would require Object.freeze()
 			expect(AFFILIATE_CONFIG).toBeDefined();
-			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(0.1);
+			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(1);
 		});
 
 		it("should have consistent nested structure", () => {
@@ -84,20 +84,20 @@ describe("AFFILIATE_CONFIG", () => {
 		it("should handle edge cases in calculations", () => {
 			// Test with very small prices
 			const smallReward = Math.floor(1 * AFFILIATE_CONFIG.REWARD_RATE);
-			expect(smallReward).toBe(0); // Should floor to 0
+			expect(smallReward).toBe(1); // Should equal price with 100% rate
 
 			// Test with large prices
 			const largePrice = 10000;
 			const largeReward = Math.floor(largePrice * AFFILIATE_CONFIG.REWARD_RATE);
-			expect(largeReward).toBe(Math.floor(10000 * 0.1)); // Calculate expected value
-			expect(largeReward).toBeLessThan(largePrice);
+			expect(largeReward).toBe(Math.floor(10000 * 1)); // Calculate expected value with 100% rate
+			expect(largeReward).toBe(largePrice); // Equal with 100% rate
 		});
 	});
 
 	describe("Game Balance Considerations", () => {
 		it("should have reasonable reward rate for game economy", () => {
-			// 10% is a common affiliate rate that's not too generous
-			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(0.1);
+			// 100% commission rate for generous affiliate rewards
+			expect(AFFILIATE_CONFIG.REWARD_RATE).toBe(1);
 		});
 
 		it("should have pricing parameters that create meaningful variation", () => {

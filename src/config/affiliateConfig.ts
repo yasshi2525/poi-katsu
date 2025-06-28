@@ -3,8 +3,8 @@
  * Centralizes all affiliate-related configuration values
  */
 export const AFFILIATE_CONFIG = {
-	/** Affiliate reward rate (10% commission) */
-	REWARD_RATE: 0.1,
+	/** Affiliate reward rate (100% commission) */
+	REWARD_RATE: 1,
 
 	/** Dynamic pricing configuration */
 	PRICING: {

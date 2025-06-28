@@ -2,6 +2,7 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
 import { PointManager } from "../manager/pointManager";
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 import { ScoreBreakdownE } from "./scoreBreakdownE";
 
@@ -11,7 +12,7 @@ import { ScoreBreakdownE } from "./scoreBreakdownE";
 const DETAIL_CONFIG = {
 	// Modal constants
 	MODAL_WIDTH: 600,
-	MODAL_HEIGHT: 500,
+	MODAL_HEIGHT: 550,
 	CONTENT_MARGIN: 20,
 	SECTION_SPACING: 30,
 	LINE_HEIGHT: 25,
@@ -21,11 +22,11 @@ const DETAIL_CONFIG = {
 	PROFILE_SECTION_HEIGHT: 120,
 
 	// Score section
-	SCORE_SECTION_HEIGHT: 150,
+	SCORE_SECTION_HEIGHT: 130,
 
 	// Button constants
-	BUTTON_WIDTH: 100,
-	BUTTON_HEIGHT: 40,
+	BUTTON_WIDTH: 180,
+	BUTTON_HEIGHT: 120,
 	BUTTON_SPACING: 120,
 
 	// Colors
@@ -195,7 +196,7 @@ export class PlayerDetailE extends g.E {
 		rankBadge.append(rankText);
 		modal.append(rankBadge);
 
-		// Player name
+		// Player name with width adjustment
 		const playerName = new g.Label({
 			scene: this.scene,
 			text: this.player.profile.name,
@@ -208,6 +209,9 @@ export class PlayerDetailE extends g.E {
 			x: 100,
 			y: startY
 		});
+		// Adjust name width to fit within modal width
+		const maxNameWidth = DETAIL_CONFIG.MODAL_WIDTH - 100 - DETAIL_CONFIG.CONTENT_MARGIN;
+		adjustLabelWidthToFit(playerName, maxNameWidth);
 		modal.append(playerName);
 
 		// Total score
@@ -349,14 +353,13 @@ export class PlayerDetailE extends g.E {
 				scene: this.scene,
 				multi: this.gameContext.gameMode.mode === "multi",
 				text: "内訳表示",
-				fontSize: 14,
 				fontFamily: "sans-serif",
-				width: 100,
-				height: 30,
+				width: 160,
+				height: 80,
+				fontSize: 32,
 				x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
 				y: startY + 45,
-				backgroundColor: "#3498db",
-				textColor: "white",
+				backgroundColor: "#689f38",
 				name: `score_breakdown_button_${this.player.id}`,
 				args: "show_breakdown",
 				onComplete: () => this.showScoreBreakdown()
@@ -391,14 +394,11 @@ export class PlayerDetailE extends g.E {
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			text: "閉じる",
-			fontSize: 16,
 			fontFamily: "sans-serif",
 			width: DETAIL_CONFIG.BUTTON_WIDTH,
 			height: DETAIL_CONFIG.BUTTON_HEIGHT,
 			x: (DETAIL_CONFIG.MODAL_WIDTH - DETAIL_CONFIG.BUTTON_WIDTH) / 2,
 			y: startY,
-			backgroundColor: "#95a5a6",
-			textColor: "white",
 			name: `player_detail_close_button_${this.player.id}`,
 			args: "close_detail",
 			onComplete: () => this.handleClose()

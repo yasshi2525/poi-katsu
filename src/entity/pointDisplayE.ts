@@ -1,3 +1,4 @@
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { NumberE } from "./numberE";
 
 /**
@@ -289,7 +290,7 @@ export class PointDisplayE extends g.E {
 		});
 		this.append(this.playerAvatarLabel);
 
-		// Player name
+		// Player name with width adjustment
 		this.playerNameLabel = new g.Label({
 			scene: this.scene,
 			font: new g.DynamicFont({
@@ -302,6 +303,8 @@ export class PointDisplayE extends g.E {
 			x: playerLayout.x + nameLayout.x,
 			y: playerLayout.y + nameLayout.y,
 		});
+		// Adjust name width to fit within allocated space
+		adjustLabelWidthToFit(this.playerNameLabel, nameLayout.width);
 		this.append(this.playerNameLabel);
 	}
 }

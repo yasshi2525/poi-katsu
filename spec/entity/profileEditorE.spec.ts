@@ -361,7 +361,7 @@ describe("ProfileEditorE", () => {
 
 			// Find and click the name button to trigger resolvePlayerInfo
 			const nameButtonBg = testProfileEditor.children?.find(child =>
-				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#689f38"
 			) as g.FilledRect;
 			expect(nameButtonBg).toBeDefined();
 
@@ -410,7 +410,7 @@ describe("ProfileEditorE", () => {
 
 			// Find and click the name button to trigger resolvePlayerInfo
 			const nameButtonBg = testProfileEditor.children?.find(child =>
-				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#689f38"
 			) as g.FilledRect;
 			expect(nameButtonBg).toBeDefined();
 
@@ -461,7 +461,7 @@ describe("ProfileEditorE", () => {
 
 			// Find the name button background (clickable area)
 			const nameButtonBg = testProfileEditor.children?.find(child =>
-				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#689f38"
 			) as g.FilledRect;
 			expect(nameButtonBg).toBeDefined();
 
@@ -520,7 +520,7 @@ describe("ProfileEditorE", () => {
 
 			// Find the name button background (clickable area)
 			const nameButtonBg = testProfileEditor.children?.find(child =>
-				child instanceof g.FilledRect && child.touchable && child.cssColor === "#34495e"
+				child instanceof g.FilledRect && child.touchable && child.cssColor === "#689f38"
 			) as g.FilledRect;
 			expect(nameButtonBg).toBeDefined();
 
@@ -600,7 +600,7 @@ describe("ProfileEditorE", () => {
 
 	function findNameButtonBackground(): g.FilledRect | null {
 		const findBgRecursive = (entity: g.E): g.FilledRect | null => {
-			if (entity instanceof g.FilledRect && entity.touchable && entity.cssColor === "#34495e") {
+			if (entity instanceof g.FilledRect && entity.touchable && entity.cssColor === "#689f38") {
 				return entity;
 			}
 			if (entity.children) {

@@ -45,8 +45,9 @@ describe("ModalE", () => {
 			// Find the content rectangle (white background)
 			const contentRect = modal.content;
 
-			expect(contentRect.width).toBe(300);
-			expect(contentRect.height).toBe(150);
+			// Content width may be auto-adjusted based on text width
+			expect(contentRect.width).toBeGreaterThanOrEqual(300);
+			expect(contentRect.height).toBeGreaterThanOrEqual(150);
 		});
 
 		it("should position modal content in center", () => {
@@ -107,7 +108,7 @@ describe("ModalE", () => {
 			) as g.Label;
 
 			expect(titleLabel).toBeDefined();
-			expect(titleLabel.fontSize).toBe(20);
+			expect(titleLabel.fontSize).toBe(48); // Updated font size
 			expect(titleLabel.textColor).toBe("black");
 		});
 
@@ -117,7 +118,7 @@ describe("ModalE", () => {
 			) as g.Label;
 
 			expect(messageLabel).toBeDefined();
-			expect(messageLabel.fontSize).toBe(16);
+			expect(messageLabel.fontSize).toBe(24); // Updated font size
 			expect(messageLabel.textColor).toBe("black");
 		});
 
@@ -130,13 +131,13 @@ describe("ModalE", () => {
 				child instanceof g.Label && (child as g.Label).text === "Test message content"
 			) as g.Label;
 
-			// Title should be 20px from content left and top
-			expect(titleLabel.x).toBe(20);
-			expect(titleLabel.y).toBe(20);
+			// Title should be 40px from content left and top (updated margin)
+			expect(titleLabel.x).toBe(40);
+			expect(titleLabel.y).toBe(40);
 
-			// Message should be 20px from left, 60px from top
-			expect(messageLabel.x).toBe(20);
-			expect(messageLabel.y).toBe(60);
+			// Message should be 40px from left, 120px from top (updated spacing)
+			expect(messageLabel.x).toBe(40);
+			expect(messageLabel.y).toBe(120);
 		});
 	});
 
@@ -157,11 +158,11 @@ describe("ModalE", () => {
 			const closeButton = modal.content.children![modal.content.children!.length - 1];
 			expect(closeButton).toBeDefined();
 
-			// Check if it's a LabelButtonE with "Close" text by checking its children
+			// Check if it's a LabelButtonE with "閉じる" text by checking its children
 			if (closeButton.children && closeButton.children.length > 1) {
 				const label = closeButton.children[1] as g.Label;
 				if (label && label.text) {
-					expect(label.text).toBe("Close");
+					expect(label.text).toBe("閉じる"); // Updated to Japanese text
 				}
 			}
 		});
@@ -171,9 +172,12 @@ describe("ModalE", () => {
 
 			const closeButton = modal.content.children![modal.content.children!.length - 1];
 
-			// Close button should be positioned at bottom-right of modal content
-			const expectedX = contentRect.width - 100; // 100px from right edge
-			const expectedY = contentRect.height - 50; // 50px from bottom
+			// Close button should be positioned at center-bottom of modal content
+			// Using new coordinate system: center x and bottom y as reference
+			const buttonWidth = 240;
+			const buttonHeight = 120;
+			const expectedX = contentRect.width / 2 - buttonWidth / 2; // Center horizontally
+			const expectedY = contentRect.height - 50 - buttonHeight; // 50px margin from bottom
 
 			expect(closeButton.x).toBe(expectedX);
 			expect(closeButton.y).toBe(expectedY);
@@ -340,8 +344,9 @@ describe("ModalE", () => {
 
 			const contentRect = modal.content;
 
-			expect(contentRect.width).toBe(400); // Default width
-			expect(contentRect.height).toBe(200); // Default height
+			// Content may be auto-adjusted based on text width and button size
+			expect(contentRect.width).toBeGreaterThanOrEqual(400); // Default width or auto-adjusted
+			expect(contentRect.height).toBeGreaterThanOrEqual(200); // Default height or auto-adjusted
 		});
 	});
 });

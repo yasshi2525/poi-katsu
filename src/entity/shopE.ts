@@ -11,31 +11,29 @@ import { ModalE } from "./modalE";
  */
 const SHOP_CONFIG = {
 	// Layout constants
-	HEADER_HEIGHT: 80,
-	PRODUCT_GRID_Y_OFFSET: 120,
+	HEADER_HEIGHT: 69, // HeaderE height
+	PRODUCT_GRID_Y_OFFSET: 69 + 69 + 20,
+	PRODUCT_GRID_SPACING: 230,
 	PRODUCT_GRID_MARGIN: 20,
 	PRODUCT_GRID_BOTTOM_MARGIN: 200,
 
 	// Product layout
-	NOVEL_SPACING: 220, // Increased spacing for novels to prevent button overlap
-	MANGA_SPACING: 200, // Increased spacing for manga to prevent overlap
-	MANGA_ROW_OFFSET: 300, // Increased offset to prevent row overlap
+	NOVEL_COLUMN_OFFSET: 230, // 戻るボタンのレイアウトの都合により左側に表示
+	MANGA_ROW_OFFSET: 260, // Increased offset to prevent row overlap
 
 	// Modal constants
-	MODAL_WIDTH: 400,
+	MODAL_WIDTH: 600,
 	MODAL_HEIGHT: 250,
-	MODAL_BUTTON_WIDTH: 80,
-	MODAL_BUTTON_HEIGHT: 35,
-	MODAL_BUTTON_Y_OFFSET: 50,
-	MODAL_CANCEL_X_OFFSET: 180,
+	MODAL_BUTTON_WIDTH: 180,
+	MODAL_BUTTON_HEIGHT: 120,
 
 	// Colors
 	BACKGROUND_COLOR: "#ecf0f1",
 	HEADER_COLOR: "#2c3e50",
-	OWNED_BUTTON_COLOR: "#95a5a6",
-	BUY_BUTTON_COLOR: "#27ae60",
+	OWNED_BUTTON_COLOR: "#616161",
+	BUY_BUTTON_COLOR: "#689f38",
 	CANCEL_BUTTON_COLOR: "#95a5a6",
-	SUCCESS_COLOR: "#27ae60",
+	SUCCESS_COLOR: "#0288d1",
 	ERROR_COLOR: "#e74c3c",
 
 	// Point back system
@@ -109,6 +107,8 @@ export class ShopE extends g.E {
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
 	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
 	private priceLabels: Map<string, g.Label> = new Map(); // Store price labels for real-time updates
+	// Store share button positions for recreation
+	private shareButtonPositions: Map<string, { x: number; y: number; width: number; height: number }> = new Map();
 	private priceUpdateListener?: () => void; // Listener for price updates from MarketManager
 
 	/**
@@ -151,7 +151,7 @@ export class ShopE extends g.E {
 	 * Public method to refresh shop when timeline visibility changes
 	 */
 	refreshForTimelineReveal(): void {
-		this.refreshShopDisplay();
+		this.updateShareButtonsForTimelineReveal();
 	}
 
 	/**
@@ -175,6 +175,7 @@ export class ShopE extends g.E {
 		this.purchaseButtons.clear();
 		this.shareButtons.clear();
 		this.priceLabels.clear();
+		this.shareButtonPositions.clear();
 
 		// Call parent destroy
 		super.destroy();
@@ -196,8 +197,8 @@ export class ShopE extends g.E {
 					width: screenWidth,
 					height: SHOP_CONFIG.HEADER_HEIGHT,
 					children: {
-						backButton: { x: 20, y: 20, width: 60, height: 40 },
-						title: { x: screenWidth / 2 - 50, y: 25, width: 100, height: 30 }
+						backButton: { x: 0, y: 69, width: 200, height: 80 },
+						title: { x: screenWidth / 2, y: 35, width: 0, height: 0 }
 					}
 				},
 				productGrid: {
@@ -212,11 +213,11 @@ export class ShopE extends g.E {
 							width: (screenWidth - 80) / 2,
 							height: 240,
 							children: {
-								image: { x: 10, y: 10, width: 120, height: 120 },
-								name: { x: 10, y: 140, width: 120, height: 20 },
-								price: { x: 10, y: 165, width: 80, height: 20 },
-								buyButton: { x: 95, y: 160, width: 45, height: 30 },
-								shareButton: { x: 95, y: 200, width: 45, height: 30 }
+								image: { x: 115, y: 0, width: 0, height: 0 },
+								name: { x: 10, y: 70, width: 120, height: 20 },
+								price: { x: 10, y: 100, width: 80, height: 20 },
+								buyButton: { x: 110, y: 100, width: 120, height: 60 },
+								shareButton: { x: 110, y: 180, width: 120, height: 60 }
 							}
 						}
 					}
@@ -264,24 +265,35 @@ export class ShopE extends g.E {
 		this.append(headerBg);
 
 		// Back button
-		const backButton = new g.Label({
+		const backBackground = new g.FilledRect({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: "white",
-			}),
-			text: "← 戻る",
 			x: this.layout.x + backButtonLayout.x,
 			y: this.layout.y + backButtonLayout.y,
+			width: backButtonLayout.width,
+			height: backButtonLayout.height,
+			cssColor: SHOP_CONFIG.HEADER_COLOR,
 			touchable: true,
 			local: true,
 		});
-		backButton.onPointDown.add(() => {
+		backBackground.onPointDown.add(() => {
 			if (this.onBack) {
 				this.onBack();
 			}
+		});
+		this.append(backBackground);
+		const backButton = new g.Label({
+			scene: this.scene,
+			x: this.layout.x + backButtonLayout.x + backButtonLayout.width / 2,
+			y: this.layout.y + backButtonLayout.y + backButtonLayout.height / 2,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 36,
+				fontColor: "white",
+			}),
+			text: "  ← 戻る",
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		this.append(backButton);
 
@@ -291,12 +303,14 @@ export class ShopE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 36,
 				fontColor: "white",
 			}),
 			text: "通販",
 			x: this.layout.x + titleLayout.x,
 			y: this.layout.y + titleLayout.y,
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		this.append(title);
 	}
@@ -313,14 +327,17 @@ export class ShopE extends g.E {
 
 		// Display novels in first row
 		novels.forEach((item, index) => {
-			const productX = this.layout.children!.productGrid.x + (index * SHOP_CONFIG.NOVEL_SPACING);
+			const productX =
+				SHOP_CONFIG.NOVEL_COLUMN_OFFSET
+				+ this.layout.children!.productGrid.x
+				+ (index * SHOP_CONFIG.PRODUCT_GRID_SPACING);
 			const productY = this.layout.children!.productGrid.y;
 			this.createProductCard(item, productX, productY);
 		});
 
 		// Display manga in second row
 		manga.forEach((item, index) => {
-			const productX = this.layout.children!.productGrid.x + (index * SHOP_CONFIG.MANGA_SPACING);
+			const productX = this.layout.children!.productGrid.x + (index * SHOP_CONFIG.PRODUCT_GRID_SPACING);
 			const productY = this.layout.children!.productGrid.y + SHOP_CONFIG.MANGA_ROW_OFFSET;
 			this.createProductCard(item, productX, productY);
 		});
@@ -371,11 +388,12 @@ export class ShopE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 48,
+				size: 60,
 			}),
 			text: item.emoji,
-			x: x + imageLayout.x + 30,
-			y: y + imageLayout.y + 30,
+			x: x + imageLayout.x + SHOP_CONFIG.PRODUCT_GRID_SPACING / 4,
+			y: y + imageLayout.y,
+			anchorX: 0.5
 		});
 		this.append(productImage);
 
@@ -385,7 +403,7 @@ export class ShopE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 24,
 				fontColor: "#2c3e50",
 			}),
 			text: item.name,
@@ -400,7 +418,8 @@ export class ShopE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				fontWeight: "bold",
+				size: 32,
 				fontColor: "#e74c3c",
 			}),
 			text: `${dynamicPrice}pt`,
@@ -430,7 +449,7 @@ export class ShopE extends g.E {
 			y: y + buyButtonLayout.y,
 			backgroundColor: buttonColor,
 			textColor: "white",
-			fontSize: 10,
+			fontSize: 24,
 			onComplete: (args: string) => this.handlePurchase(args)
 		});
 
@@ -444,8 +463,33 @@ export class ShopE extends g.E {
 
 		this.append(buyButton);
 
+		// Create and store share button
+		this.createShareButton(item, x, y, shareButtonLayout, dynamicPrice);
+	}
+
+	/**
+	 * Creates a share button for the given item
+	 * @param item The item data
+	 * @param cardX The card's x position
+	 * @param cardY The card's y position
+	 * @param shareButtonLayout The button layout configuration
+	 * @param dynamicPrice The current dynamic price
+	 */
+	private createShareButton(item: ItemData, cardX: number, cardY: number, shareButtonLayout: LayoutConfig, dynamicPrice: number): void {
+		const buttonX = cardX + shareButtonLayout.x;
+		const buttonY = cardY + shareButtonLayout.y;
+
+		// Store position information for potential recreation
+		this.shareButtonPositions.set(item.id, {
+			x: buttonX,
+			y: buttonY,
+			width: shareButtonLayout.width,
+			height: shareButtonLayout.height
+		});
+
 		// Share button (always visible but disabled if timeline not revealed)
 		const isTimelineRevealed = this.onIsTimelineRevealed();
+
 		const shareButton = new LabelButtonE({
 			scene: this.scene,
 			multi: this.multi,
@@ -454,11 +498,11 @@ export class ShopE extends g.E {
 			text: "シェア",
 			width: shareButtonLayout.width,
 			height: shareButtonLayout.height,
-			x: x + shareButtonLayout.x,
-			y: y + shareButtonLayout.y,
-			backgroundColor: isTimelineRevealed ? "#3498db" : "#95a5a6", // Gray if disabled
-			textColor: isTimelineRevealed ? "white" : "#7f8c8d", // Darker gray text if disabled
-			fontSize: 10,
+			x: buttonX,
+			y: buttonY,
+			backgroundColor: isTimelineRevealed ? "#0288d1" : "#616161", // Gray if disabled
+			textColor: "white",
+			fontSize: 24,
 			onComplete: (args: string) => isTimelineRevealed ? this.handleShare(args) : this.handleShareDisabled(args)
 		});
 
@@ -665,10 +709,19 @@ export class ShopE extends g.E {
 		// Replace close button with custom buttons using new multi-button API
 		modal.replaceCloseButtons([
 			{
+				text: "購入",
+				backgroundColor: SHOP_CONFIG.BUY_BUTTON_COLOR,
+				textColor: "white",
+				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
+				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
+				onComplete: () => {
+					this.executePurchase(item, dynamicPrice);
+				}
+			},
+			{
 				text: "キャンセル",
 				backgroundColor: SHOP_CONFIG.CANCEL_BUTTON_COLOR,
 				textColor: "white",
-				fontSize: 14,
 				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
 				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
 				onComplete: () => {
@@ -678,17 +731,6 @@ export class ShopE extends g.E {
 						purchaseButton.reactivate();
 					}
 					// Modal closes automatically after onComplete
-				}
-			},
-			{
-				text: "購入",
-				backgroundColor: SHOP_CONFIG.BUY_BUTTON_COLOR,
-				textColor: "white",
-				fontSize: 14,
-				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
-				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
-				onComplete: () => {
-					this.executePurchase(item, dynamicPrice);
 				}
 			}
 		]);
@@ -717,9 +759,9 @@ export class ShopE extends g.E {
 			// Show success modal with point back info
 			this.showPurchaseModal(`${item.name}を購入しました！\n\n-${dynamicPrice}pt (変動価格)\n+${pointBack}pt (ポイントバック)\n実質 -${netCost}pt`, true);
 
-			// Refresh the shop display to update button states
+			// Update button states without recreating the entire display
 			this.scene.setTimeout(() => {
-				this.refreshShopDisplay();
+				this.updateButtonStatesAfterPurchase(item.id);
 			}, 1000);
 		} else {
 			// Show error modal and reactivate purchase button
@@ -755,7 +797,6 @@ export class ShopE extends g.E {
 			text: "OK",
 			backgroundColor: isSuccess ? SHOP_CONFIG.SUCCESS_COLOR : SHOP_CONFIG.ERROR_COLOR,
 			textColor: "white",
-			fontSize: 14,
 			width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
 			height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
 			onComplete: () => this.closeModal()
@@ -787,23 +828,9 @@ export class ShopE extends g.E {
 		// Add confirmation buttons
 		modal.replaceCloseButtons([
 			{
-				text: "キャンセル",
-				backgroundColor: SHOP_CONFIG.CANCEL_BUTTON_COLOR,
-				textColor: "white",
-				fontSize: 14,
-				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
-				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
-				onComplete: () => {
-					// Reactivate the share button when cancel is clicked, but maintain disabled style
-					this.reactivateDisabledShareButton(itemId);
-					// Modal closes automatically after onComplete
-				}
-			},
-			{
 				text: "OK",
 				backgroundColor: SHOP_CONFIG.BUY_BUTTON_COLOR,
 				textColor: "white",
-				fontSize: 14,
 				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
 				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
 				onComplete: () => {
@@ -811,6 +838,18 @@ export class ShopE extends g.E {
 					if (this.onSnsConnectionRequest) {
 						this.onSnsConnectionRequest();
 					}
+				}
+			},
+			{
+				text: "キャンセル",
+				backgroundColor: SHOP_CONFIG.CANCEL_BUTTON_COLOR,
+				textColor: "white",
+				width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
+				height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
+				onComplete: () => {
+					// Reactivate the share button when cancel is clicked, but maintain disabled style
+					this.reactivateDisabledShareButton(itemId);
+					// Modal closes automatically after onComplete
 				}
 			}
 		]);
@@ -849,19 +888,77 @@ export class ShopE extends g.E {
 	}
 
 	/**
-	 * Refreshes the shop display to update button states
+	 * Updates share buttons when timeline is revealed by recreating them with new functionality
 	 */
-	private refreshShopDisplay(): void {
-		// Clear button references for reactivation
-		this.purchaseButtons.clear();
-		this.shareButtons.clear();
+	private updateShareButtonsForTimelineReveal(): void {
+		const isTimelineRevealed = this.onIsTimelineRevealed();
 
-		// Remove all children and recreate the layout
-		// This is a simple approach to refresh the display
-		if (this.children) {
-			this.children.forEach(child => child.destroy());
+		// Only recreate if timeline was just revealed
+		if (isTimelineRevealed) {
+			this.recreateAllShareButtons();
 		}
-		this.createLayout();
+	}
+
+	/**
+	 * Recreates share buttons with current timeline status and prices
+	 * Only recreates buttons that are still active (not already shared)
+	 */
+	private recreateAllShareButtons(): void {
+		const availableItems = this.itemManager.getAvailableItems();
+
+		availableItems.forEach(item => {
+			const existingButton = this.shareButtons.get(item.id);
+			const position = this.shareButtonPositions.get(item.id);
+
+			if (existingButton && position) {
+				// Only recreate if the button is still touchable (not already shared)
+				if (existingButton.touchable) {
+					// Remove existing button
+					existingButton.destroy();
+					this.shareButtons.delete(item.id);
+
+					// Get current dynamic price
+					const currentPrice = this.getDynamicPrice(item);
+
+					// Create new share button with timeline-enabled functionality
+					const isTimelineRevealed = this.onIsTimelineRevealed();
+					const newShareButton = new LabelButtonE({
+						scene: this.scene,
+						multi: this.multi,
+						name: `shop_share_${item.id}_recreated`, // Add suffix to ensure unique name
+						args: `${item.id}_${currentPrice}`,
+						text: "シェア",
+						width: position.width,
+						height: position.height,
+						x: position.x,
+						y: position.y,
+						backgroundColor: isTimelineRevealed ? "#3498db" : "#95a5a6",
+						textColor: isTimelineRevealed ? "white" : "#7f8c8d",
+						fontSize: 24,
+						onComplete: (args: string) => isTimelineRevealed ? this.handleShare(args) : this.handleShareDisabled(args)
+					});
+
+					// Store new button reference
+					this.shareButtons.set(item.id, newShareButton);
+					this.append(newShareButton);
+				}
+				// If button is not touchable (already shared), leave it as-is
+			}
+		});
+	}
+
+	/**
+	 * Updates button states after a purchase without recreating the entire display
+	 * @param purchasedItemId The ID of the item that was purchased
+	 */
+	private updateButtonStatesAfterPurchase(purchasedItemId: string): void {
+		// Update the purchased item's button to show "所持済" and disable it
+		const purchaseButton = this.purchaseButtons.get(purchasedItemId);
+		if (purchaseButton) {
+			purchaseButton.setText("所持済");
+			purchaseButton.setBackgroundColor(SHOP_CONFIG.OWNED_BUTTON_COLOR);
+			purchaseButton.touchable = false;
+		}
 	}
 
 

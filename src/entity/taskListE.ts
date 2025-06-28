@@ -160,7 +160,7 @@ export class TaskListE extends g.E {
 			const activeTasks = this.tasks.filter(t => !t.completed && !completedTaskIds.has(t.id));
 			const index = activeTasks.findIndex(t => t.id === task.id);
 			if (index >= 0) {
-				const taskY = this.layout.y + this.layout.children!.item.y + (index * 60);
+				const taskY = this.layout.y + this.layout.children!.item.y + (index * this.layout.children!.item.height);
 				this.createTaskItem(task, this.layout.children!.item.x, taskY);
 			}
 		});
@@ -175,9 +175,9 @@ export class TaskListE extends g.E {
 	private createLayoutConfig(screenWidth: number, screenHeight: number): LayoutConfig {
 		return {
 			x: 20, // Match AdBanner margin for left block alignment
-			y: 289, // Below header(69) + ItemList(60) + margin(20) + AdBanner(120) + margin(29) = 289
+			y: 249, // Below header(69) + ItemList(60) + margin(20) + AdBanner(80) + margin(29) = 249
 			width: screenWidth - 720, // Right edge aligns with timeline left edge
-			height: 240,
+			height: 0, // Un-used, no limit on height
 			children: {
 				header: {
 					x: 0,
@@ -185,21 +185,21 @@ export class TaskListE extends g.E {
 					width: screenWidth - 720, // Match container width
 					height: 30,
 					children: {
-						newBadge: { x: 0, y: 0, width: 50, height: 25 },
-						newLabel: { x: 5, y: 5, width: 40, height: 15 },
-						title: { x: 60, y: 2, width: 100, height: 25 }
+						newBadge: { x: 80, y: 0, width: 60, height: 36 },
+						newLabel: { x: 85, y: 5, width: 40, height: 15 },
+						title: { x: 0, y: 2, width: 100, height: 25 }
 					}
 				},
 				item: {
 					x: 20, // Left margin
-					y: 40,
+					y: 30,
 					width: screenWidth - 760, // Container width minus left and right margins (20 + 20)
-					height: 50,
+					height: 80,
 					children: {
-						icon: { x: 15, y: 15, width: 20, height: 20 },
-						title: { x: 50, y: 10, width: 200, height: 16 },
-						reward: { x: 50, y: 30, width: 100, height: 12 },
-						executeBtn: { x: screenWidth - 840, y: 10, width: 60, height: 30 },
+						icon: { x: 15, y: 15, width: 30, height: 32 },
+						title: { x: 80, y: 10, width: 200, height: 16 },
+						reward: { x: 80, y: 45, width: 100, height: 12 },
+						executeBtn: { x: screenWidth - 900, y: 10, width: 120, height: 60 },
 						executeLabel: { x: screenWidth - 825, y: 18, width: 30, height: 12 }
 					}
 				}
@@ -240,7 +240,7 @@ export class TaskListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				size: 18,
 				fontColor: "white",
 			}),
 			text: "NEW",
@@ -254,7 +254,7 @@ export class TaskListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 24,
 				fontColor: "white",
 			}),
 			text: "タスク",
@@ -271,7 +271,7 @@ export class TaskListE extends g.E {
 		const activeTasks = this.tasks.filter(task => !task.completed);
 
 		activeTasks.forEach((task, index) => {
-			const taskItemY = this.layout.y + this.layout.children!.item.y + (index * 60);
+			const taskItemY = this.layout.y + this.layout.children!.item.y + (index * this.layout.children!.item.height);
 			this.createTaskItem(task, this.layout.children!.item.x, taskItemY);
 		});
 	}
@@ -310,7 +310,7 @@ export class TaskListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 40,
 			}),
 			text: task.icon,
 			x: iconLayout.x,
@@ -324,7 +324,7 @@ export class TaskListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 24,
 				fontColor: "white",
 			}),
 			text: task.title,
@@ -339,7 +339,7 @@ export class TaskListE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				size: 18,
 				fontColor: "#bdc3c7",
 			}),
 			text: `報酬: ${task.reward}`,
@@ -361,7 +361,7 @@ export class TaskListE extends g.E {
 			text: "実行",
 			backgroundColor: "#27ae60",
 			textColor: "white",
-			fontSize: 12,
+			fontSize: 24,
 			onComplete: (taskId: string) => {
 				const taskItem = this.taskItems.get(taskId);
 				if (taskItem) {
@@ -457,17 +457,6 @@ export class TaskListE extends g.E {
 		// Use new multi-button API instead of manual appending
 		this.currentModal.replaceCloseButtons([
 			{
-				text: "キャンセル",
-				backgroundColor: "#95a5a6",
-				textColor: "white",
-				fontSize: 14,
-				width: 100,
-				height: 35,
-				onComplete: () => {
-					// Modal closes automatically after onComplete
-				}
-			},
-			{
 				text: "実行",
 				backgroundColor: "#27ae60",
 				textColor: "white",
@@ -476,6 +465,17 @@ export class TaskListE extends g.E {
 				height: 35,
 				onComplete: () => {
 					this.executeTask(task.id);
+				}
+			},
+			{
+				text: "キャンセル",
+				backgroundColor: "#95a5a6",
+				textColor: "white",
+				fontSize: 14,
+				width: 100,
+				height: 35,
+				onComplete: () => {
+					// Modal closes automatically after onComplete
 				}
 			}
 		]);
@@ -528,11 +528,8 @@ export class TaskListE extends g.E {
 		// Use new multi-button API instead of manual appending
 		this.currentModal.replaceCloseButton({
 			text: "OK",
-			backgroundColor: "#3498db",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 30,
+			width: 180,
+			height: 120,
 			onComplete: () => {
 				// Start fade out animation after modal closes
 				this.fadeOutAndRemoveTask(task.id);
@@ -612,7 +609,7 @@ export class TaskListE extends g.E {
 		// Calculate new positions for remaining tasks
 		const newPositions = new Map<string, number>();
 		activeTasks.forEach((task, index) => {
-			const newY = this.layout.y + this.layout.children!.item.y + (index * 60);
+			const newY = this.layout.y + this.layout.children!.item.y + (index * this.layout.children!.item.height);
 			newPositions.set(task.id, newY);
 		});
 

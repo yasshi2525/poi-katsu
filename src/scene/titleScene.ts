@@ -55,10 +55,9 @@ export class TitleScene extends BaseScene {
 		this.createBackground();
 		this.createTitle();
 		this.createGameConceptText();
-		this.createFeatureIcons();
 		this.createPlayerCount();
 		this.createJoinButton();
-		this.createDummyButtons();
+		this.createDummyButton();
 		this.startFallingCoins();
 
 		// メッセージハンドラーを設定
@@ -92,6 +91,7 @@ export class TitleScene extends BaseScene {
 			const gameMasterId = this.game.joinedPlayerIds[0];
 			const gameMaster = createPlayerData(gameMasterId, createInitialPlayerProfile(), 0);
 			this.gameContext.addPlayer(gameMaster.id, gameMaster);
+			this.joinedPlayers.add(gameMaster.id);
 		}
 	}
 
@@ -107,13 +107,13 @@ export class TitleScene extends BaseScene {
 			font: new g.DynamicFont({
 				game: this.game,
 				fontFamily: "sans-serif",
-				size: 60,
+				size: 90,
 				fontColor: "#f39c12",
 				strokeColor: "#2c3e50",
-				strokeWidth: 4
+				strokeWidth: 8
 			}),
 			x: this.game.width / 2,
-			y: 120,
+			y: 70,
 			anchorX: 0.5,
 			anchorY: 0.5
 		});
@@ -124,13 +124,13 @@ export class TitleScene extends BaseScene {
 			font: new g.DynamicFont({
 				game: this.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 48,
 				fontColor: "#ecf0f1",
 				strokeColor: "#2c3e50",
-				strokeWidth: 2
+				strokeWidth: 4
 			}),
 			x: this.game.width / 2,
-			y: 180,
+			y: 160,
 			anchorX: 0.5,
 			anchorY: 0.5
 		});
@@ -142,7 +142,7 @@ export class TitleScene extends BaseScene {
 
 	private createGameConceptText(): void {
 		const conceptLines = [
-			"SNS連携、いいね、広告タップ、通販でポイントゲット！",
+			"SNS連携、広告タップ、通販でポイントゲット！",
 			"セールを狙って商品購入、フリマで換金",
 			"シリーズ商品をコンプリートして超ボーナス！",
 			"次々と解禁される機能を使いこなして",
@@ -157,13 +157,13 @@ export class TitleScene extends BaseScene {
 				font: new g.DynamicFont({
 					game: this.game,
 					fontFamily: "sans-serif",
-					size: 18,
+					size: 24,
 					fontColor: "#bdc3c7",
 					strokeColor: "black",
 					strokeWidth: 2
 				}),
 				x: this.game.width / 2,
-				y: 240 + (index * 30),
+				y: 240 + (index * 36),
 				anchorX: 0.5,
 				anchorY: 0.5
 			});
@@ -173,52 +173,6 @@ export class TitleScene extends BaseScene {
 		this.append(conceptContainer);
 	}
 
-	private createFeatureIcons(): void {
-		const iconContainer = new g.E({ scene: this });
-		const centerX = this.game.width / 2;
-		const yPosition = 400; // 説明文の下、ポイント長者を目指せ！の下
-		const features = [
-			{ name: "SNS", color: "#3498db", x: centerX - 120 },
-			{ name: "通販", color: "#e74c3c", x: centerX },
-			{ name: "広告", color: "#2ecc71", x: centerX + 120 }
-		];
-
-		features.forEach(feature => {
-			const iconBg = new g.FilledRect({
-				scene: this,
-				cssColor: feature.color,
-				width: 80,
-				height: 80,
-				x: feature.x,
-				y: yPosition,
-				anchorX: 0.5,
-				anchorY: 0.5
-			});
-
-			const iconLabel = new g.Label({
-				scene: this,
-				text: feature.name,
-				font: new g.DynamicFont({
-					game: this.game,
-					fontFamily: "sans-serif",
-					size: 16,
-					fontColor: "white",
-					strokeColor: "#2c3e50",
-					strokeWidth: 2
-				}),
-				x: feature.x,
-				y: yPosition,
-				anchorX: 0.5,
-				anchorY: 0.5
-			});
-
-			iconContainer.append(iconBg);
-			iconContainer.append(iconLabel);
-		});
-
-		this.append(iconContainer);
-	}
-
 	private createPlayerCount(): void {
 		this.playerCountLabel = new g.Label({
 			scene: this,
@@ -226,13 +180,13 @@ export class TitleScene extends BaseScene {
 			font: new g.DynamicFont({
 				game: this.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 24,
 				fontColor: "#ecf0f1",
 				strokeColor: "black",
 				strokeWidth: 3
 			}),
 			x: this.game.width / 2,
-			y: this.game.height - 200, // 200ptに変更（128pt + ボタン高さ + マージン）
+			y: this.game.height - 60,
 			anchorX: 0.5,
 			anchorY: 0.5
 		});
@@ -251,7 +205,7 @@ export class TitleScene extends BaseScene {
 			? "参加受付を終了してゲームを始める（途中参加可）"
 			: "ゲームに参加する";
 
-		const backgroundColor = this.isGameMaster ? "#27ae60" : "#3498db";
+		const backgroundColor = "#0288d1";
 		const buttonActionType = this.isGameMaster ? "startGame" : "joinGame";
 
 		const joinButton = new LabelButtonE({
@@ -259,8 +213,8 @@ export class TitleScene extends BaseScene {
 			multi: this.mode === "multi",
 			name: `titleJoinButton_${this.game.selfId}_${++this.buttonCounter}`,
 			args: buttonActionType,
-			width: 320,
-			height: 60,
+			width: 360,
+			height: 120,
 			x: this.game.width / 2,
 			y: this.game.height - 148, // 128pt + 20pt margin
 			anchorX: 0.5,
@@ -268,7 +222,7 @@ export class TitleScene extends BaseScene {
 			text: buttonText,
 			backgroundColor: backgroundColor,
 			textColor: "white",
-			fontSize: 18,
+			fontSize: 36,
 			onComplete: (action: string) => {
 				this.handleJoinButtonClick();
 			},
@@ -325,21 +279,21 @@ export class TitleScene extends BaseScene {
 			// 参加
 			this.isJoined = true;
 			this.broadcastMessage("join");
-			this.updateJoinButtonText("参加取り消し");
+			this.updateJoinButtonText("参加取り消し", true);
 		}
 	}
 
-	private updateJoinButtonText(text: string): void {
+	private updateJoinButtonText(text: string, cancel: boolean = false): void {
 		// LabelButtonEは一度作成すると内部のテキストを変更できないため、
 		// 新しいボタンを作成し直す
 		if (this.joinButton) {
 			this.joinButton.destroy();
 		}
-		this.createJoinButtonWithText(text);
+		this.createJoinButtonWithText(text, cancel);
 	}
 
-	private createJoinButtonWithText(buttonText: string): void {
-		const backgroundColor = this.isGameMaster ? "#27ae60" : "#3498db";
+	private createJoinButtonWithText(buttonText: string, cancel: boolean = false): void {
+		const backgroundColor = cancel ? "#e74c3c" : "#0288d1";
 		const buttonActionType = this.isGameMaster ? "startGame" : "joinGame";
 
 		const joinButton = new LabelButtonE({
@@ -347,8 +301,8 @@ export class TitleScene extends BaseScene {
 			multi: this.mode === "multi",
 			name: `titleJoinButton_${this.game.selfId}_${++this.buttonCounter}`, // ユニークな名前
 			args: buttonActionType,
-			width: 320,
-			height: 60,
+			width: 360,
+			height: 120,
 			x: this.game.width / 2,
 			y: this.game.height - 148, // 128pt + 20pt margin
 			anchorX: 0.5,
@@ -356,7 +310,7 @@ export class TitleScene extends BaseScene {
 			text: buttonText,
 			backgroundColor: backgroundColor,
 			textColor: "white",
-			fontSize: 18,
+			fontSize: 36,
 			onComplete: (action: string) => {
 				this.handleJoinButtonClick();
 			},
@@ -367,71 +321,40 @@ export class TitleScene extends BaseScene {
 		this.joinButtonLabel = joinButton as any;
 	}
 
-	private createDummyButtons(): void {
-		// 左側のダミーボタン
-		const leftButton = new g.FilledRect({
+	private createDummyButton(): void {
+		const button = new g.FilledRect({
 			scene: this,
-			cssColor: "#e67e22",
-			width: 120,
-			height: 50,
-			x: 100 - 60, // anchorX 0.5相当
-			y: this.game.height - 200 - 25, // anchorY 0.5相当
+			cssColor: "#ffa000",
+			width: 180,
+			height: 80,
+			x: this.game.width / 2,
+			y: this.game.height - 270,
+			anchorX: 0.5,
+			anchorY: 0.5,
 			touchable: true
 		});
 
-		const leftLabel = new g.Label({
+		button.onPointUp.add(() => {
+			this.startAutoCoinCollection();
+		});
+
+		const label = new g.Label({
 			scene: this,
 			text: "ポイント獲得",
 			font: new g.DynamicFont({
 				game: this.game,
 				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-				strokeColor: "black",
-				strokeWidth: 2
+				size: 24,
+				fontColor: "white"
 			}),
-			x: 100 - 35, // 中央揃え
-			y: this.game.height - 200 - 7, // 中央揃え
+			x: button.x,
+			y: button.y,
+			anchorX: 0.5,
+			anchorY: 0.5,
 		});
 
-		leftButton.onPointUp.add(() => {
-			this.startAutoCoinCollection();
-		});
-
-		// 右側のダミーボタン
-		const rightButton = new g.FilledRect({
-			scene: this,
-			cssColor: "#e67e22",
-			width: 120,
-			height: 50,
-			x: this.game.width - 100 - 60, // anchorX 0.5相当
-			y: this.game.height - 200 - 25, // anchorY 0.5相当
-			touchable: true
-		});
-
-		const rightLabel = new g.Label({
-			scene: this,
-			text: "ポイント獲得",
-			font: new g.DynamicFont({
-				game: this.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-				strokeColor: "black",
-				strokeWidth: 2
-			}),
-			x: this.game.width - 100 - 35, // 中央揃え
-			y: this.game.height - 200 - 7, // 中央揃え
-		});
-
-		rightButton.onPointUp.add(() => {
-			this.startAutoCoinCollection();
-		});
-
-		this.append(leftButton);
-		this.append(leftLabel);
-		this.append(rightButton);
-		this.append(rightLabel);
+		this.append(button);
+		this.append(label);
 	}
 
 	private broadcastMessage(action: "join" | "leave"): void {

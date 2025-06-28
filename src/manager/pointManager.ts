@@ -50,12 +50,8 @@ export const POINT_CONSTANTS = {
 	// Ad banner reward points
 	AD_BANNER_CLICK_REWARD: 100,
 
-	// Banner specific rewards
-	BANNER_SALE_CAMPAIGN_REWARD: 50,
-	BANNER_POINT_BONUS_REWARD: 25,
-
 	// Shopping point back rate
-	SHOPPING_POINT_BACK_RATE: 0.1, // 10% point back rate
+	SHOPPING_POINT_BACK_RATE: 0.5, // 50% point back rate
 
 	// Set completion bonus points
 	SET_CLOTHES_BONUS: 1000,

@@ -250,7 +250,7 @@ export class TaskManager {
 		// Close any existing modal first
 		this.context.onModalClose();
 
-		const modalMessage = "SNSと連携しました！\n\nタイムライン機能が利用可能になりました。\n他のユーザーの投稿を見て、いいねやコメントでポイントを獲得しましょう！";
+		const modalMessage = "SNSと連携しました！\n\nタイムライン機能が利用可能になりました。\n他のユーザーの投稿を見て、オトクなセール商品をゲットしましょう！";
 
 		const modal = new ModalE({
 			scene: this.context.scene,
@@ -305,11 +305,8 @@ export class TaskManager {
 	private addTimelineModalButton(modal: ModalE<string>, taskData: TaskData): void {
 		modal.replaceCloseButton({
 			text: "OK",
-			backgroundColor: "#27ae60",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
+			width: 180,
+			height: 120,
 			onComplete: () => {
 				this.completeSnsTask(taskData);
 			}
@@ -322,11 +319,8 @@ export class TaskManager {
 	private addShoppingModalButton(modal: ModalE<string>, taskData: TaskData): void {
 		modal.replaceCloseButton({
 			text: "OK",
-			backgroundColor: "#2980b9",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
+			width: 180,
+			height: 120,
 			onComplete: () => {
 				this.completeShoppingTask(taskData);
 			}

@@ -78,7 +78,7 @@ export class ModalE<T> extends g.E {
 		const font = new g.DynamicFont({
 			game: options.scene.game,
 			fontFamily: "sans-serif",
-			size: 24
+			size: 48
 		});
 
 		// Title
@@ -86,10 +86,10 @@ export class ModalE<T> extends g.E {
 			scene: options.scene,
 			text: options.title,
 			font: font,
-			fontSize: 20,
+			fontSize: 48,
 			textColor: "black",
-			x: 20,
-			y: 20
+			x: 40,
+			y: 40
 		});
 		this.content.append(this.titleLabel);
 
@@ -99,23 +99,28 @@ export class ModalE<T> extends g.E {
 			parent: this.content,
 			text: msg,
 			font: font,
-			fontSize: 16,
+			fontSize: 24,
 			textColor: "black",
-			x: 20,
-			y: 60 + i * 24
+			x: 40,
+			y: 120 + i * 36
 		}));
 
-		// Close button
+		// Check if content needs to be resized based on text width
+		this.adjustContentSizeForText();
+
+		// Close button (positioned using new coordinate system for consistency)
+		const buttonWidth = 240;
+		const buttonHeight = 120;
 		this._closeButton = new LabelButtonE({
 			scene: options.scene,
 			multi: this.multi,
 			name: options.name,
 			args: options.args,
-			text: "Close",
-			width: 80,
-			height: 30,
-			x: modalWidth - 100,
-			y: modalHeight - 50,
+			text: "閉じる",
+			width: buttonWidth,
+			height: buttonHeight,
+			x: this.content.width / 2 - buttonWidth / 2, // Center horizontally
+			y: this.content.height - 50 - buttonHeight, // 50px margin from bottom
 			onComplete: () => {
 				if (options.onClose) {
 					options.onClose();
@@ -149,8 +154,8 @@ export class ModalE<T> extends g.E {
 		fontSize?: number;
 		width?: number;
 		height?: number;
-		x?: number;
-		y?: number;
+		x?: number; // Relative to content center x
+		y?: number; // Relative to content bottom y
 		onComplete?: () => void;
 	}): void {
 		// For backward compatibility, treat single button as array with one element
@@ -168,8 +173,8 @@ export class ModalE<T> extends g.E {
 		fontSize?: number;
 		width?: number;
 		height?: number;
-		x?: number;
-		y?: number;
+		x?: number; // Relative to content center x
+		y?: number; // Relative to content bottom y
 		onComplete?: () => void;
 	}>): void {
 		// Remove the existing close button
@@ -180,20 +185,27 @@ export class ModalE<T> extends g.E {
 		}
 
 		// Create buttons with automatic positioning if not specified
+		// New coordinate system: center x and bottom y as reference points
 		const buttonSpacing = 10;
-		const defaultButtonWidth = 80;
-		const defaultButtonHeight = 30;
+		const defaultButtonWidth = 240;
+		const defaultButtonHeight = 120;
+		const contentCenterX = this.content.width / 2;
+		const contentBottomY = this.content.height;
 		const totalButtonsWidth = buttonsOptions.length * defaultButtonWidth + (buttonsOptions.length - 1) * buttonSpacing;
-		const startX = (this.content.width - totalButtonsWidth) / 2;
+		const defaultStartXOffset = -totalButtonsWidth / 2; // Center the buttons by default
 
 		buttonsOptions.forEach((buttonOptions, index) => {
+			const buttonWidth = buttonOptions.width || defaultButtonWidth;
+			const buttonHeight = buttonOptions.height || defaultButtonHeight;
+
+			// Calculate position relative to content center x and bottom y
 			const buttonX = buttonOptions.x !== undefined ?
-				buttonOptions.x :
-				startX + (index * (defaultButtonWidth + buttonSpacing));
+				contentCenterX + buttonOptions.x - buttonWidth / 2 : // Custom x offset from center
+				contentCenterX + defaultStartXOffset + (index * (defaultButtonWidth + buttonSpacing)); // Auto-positioned
 
 			const buttonY = buttonOptions.y !== undefined ?
-				buttonOptions.y :
-				this.content.height - 50;
+				contentBottomY + buttonOptions.y - buttonHeight : // Custom y offset from bottom
+				contentBottomY - 40 - buttonHeight; // Default: 40px margin from bottom
 
 			const button = new LabelButtonE({
 				scene: this.scene,
@@ -201,8 +213,8 @@ export class ModalE<T> extends g.E {
 				name: `${this._closeButton.name}_button_${index}`,
 				args: this._closeButton.msgArgs,
 				text: buttonOptions.text,
-				width: buttonOptions.width || defaultButtonWidth,
-				height: buttonOptions.height || defaultButtonHeight,
+				width: buttonWidth,
+				height: buttonHeight,
 				x: buttonX,
 				y: buttonY,
 				backgroundColor: buttonOptions.backgroundColor,
@@ -248,5 +260,45 @@ export class ModalE<T> extends g.E {
 			this.content.modified();
 			this.overlay.modified();
 		});
+	}
+
+	/**
+	 * Adjusts the content size based on text width to prevent layout overflow
+	 * Resizes the content panel if any label exceeds the available width
+	 */
+	private adjustContentSizeForText(): void {
+		const margin = 40; // x position of labels = margin
+		const availableWidth = this.content.width - margin * 2;
+		// Calculate available y based on close button position
+		// NOTE: ボタンの高さは120という前提を置いている
+		const buttonHeight = 120;
+		const availableMaxY = this.content.height - margin - buttonHeight - margin;
+
+		// Find the maximum text width among all labels
+		let maxTextWidth = 0;
+
+		// Check title label width
+		if (this.titleLabel) {
+			maxTextWidth = Math.max(maxTextWidth, this.titleLabel.width);
+		}
+
+		// Check message labels width
+		for (const messageLabel of this.messageLabels) {
+			maxTextWidth = Math.max(maxTextWidth, messageLabel.width);
+		}
+
+		// If text width exceeds available width, resize content
+		if (maxTextWidth > availableWidth) {
+			const newContentWidth = maxTextWidth + margin * 2;
+			this.content.resize(newContentWidth, this.content.height);
+		}
+
+		// Check if content height needs to be adjusted based on message labels
+		const maxTextY = Math.max(...this.messageLabels.map(label => label.y + label.height));
+		if (maxTextY > availableMaxY) {
+			const newContentHeight = maxTextY + margin + buttonHeight + margin;
+			this.content.resize(this.content.width, newContentHeight);
+			// repositon of close button will be done later
+		}
 	}
 }

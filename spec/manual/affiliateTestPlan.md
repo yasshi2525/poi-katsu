@@ -5,10 +5,10 @@ This document provides manual test cases to verify the affiliate functionality i
 ## Test Plan Status
 
 - [x] Verify dynamic pricing changes over time
-- [x] Test share button disabled/enabled states  
+- [x] Test share button disabled/enabled states
 - [x] Confirm SNS connection flow from disabled share button
 - [x] Validate affiliate posts appear in timeline
-- [x] Check 10% reward calculation and notifications
+- [x] Check 50% reward calculation and notifications
 - [x] Test layout on different screen sizes
 - [x] Verify proper header layering in shop
 - [x] Confirm button reactivation after modal cancel
@@ -33,7 +33,7 @@ This document provides manual test cases to verify the affiliate functionality i
 - All prices remain within bounds (50% to 200% of base price)
 - Prices are always at least 1 point
 
-**Implementation Verified**: 
+**Implementation Verified**:
 - `calculateDynamicPrice()` method in ShopE
 - Uses `scene.game.random.generate()` for deterministic behavior
 - Implements time-based volatility using `AFFILIATE_CONFIG.PRICING`
@@ -105,19 +105,19 @@ This document provides manual test cases to verify the affiliate functionality i
 - `createAffiliateTimelineItem()` creates proper post layout
 - Posts include all required information with proper formatting
 
-### 5. 10% Reward Calculation and Notifications ✅
+### 5. 50% Reward Calculation and Notifications ✅
 
 **Test Case**: Verify affiliate rewards are calculated correctly and notifications appear.
 
 **Steps**:
 1. Player A shares a product priced at 100 points
 2. Player B purchases the shared product
-3. Verify Player A receives 10 points (10% of 100) as affiliate reward
+3. Verify Player A receives 50 points (50% of 100) as affiliate reward
 4. Check that reward notification appears for Player A
 
 **Expected Results**:
 - Affiliate reward = Math.floor(shared_price * 0.1)
-- Examples: 100pt → 10pt reward, 250pt → 25pt reward, 99pt → 9pt reward
+- Examples: 100pt → 50pt reward, 250pt → 125pt reward, 99pt → 49pt reward
 - Notification appears showing reward amount
 - Points are added to Player A's balance
 
@@ -196,7 +196,7 @@ This document provides manual test cases to verify the affiliate functionality i
 
 ### Dynamic Price Edge Cases ✅
 - Negative base prices → defaults to 100
-- Zero base prices → defaults to 100  
+- Zero base prices → defaults to 100
 - Negative remaining time → clamped to 0
 - Price bounds: always between 1 and 2x base price
 
@@ -231,7 +231,7 @@ This document provides manual test cases to verify the affiliate functionality i
 
 ✅ **Affiliate reward calculation accuracy** - Comprehensive tests for 10% calculation
 ✅ **Share button state transitions** - Disabled/enabled state management
-✅ **Dynamic price edge cases** - Negative prices, overflow, bounds checking  
+✅ **Dynamic price edge cases** - Negative prices, overflow, bounds checking
 ✅ **Concurrent purchase scenarios** - Rapid clicks, state synchronization
 ✅ **Modal interaction flows** - SNS connection, purchase confirmation
 ✅ **Layout and responsiveness** - Different screen sizes, proper layering
@@ -243,5 +243,5 @@ This document provides manual test cases to verify the affiliate functionality i
 All test cases have been implemented and verified through both unit tests and manual testing guidelines. The affiliate functionality is robust, handles edge cases properly, and provides a good user experience across different scenarios.
 
 **Total Test Suites**: 15 passed
-**Total Tests**: 193 passed  
+**Total Tests**: 193 passed
 **Test Coverage**: Comprehensive coverage of all affiliate functionality

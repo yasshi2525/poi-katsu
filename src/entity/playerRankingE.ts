@@ -2,6 +2,7 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
 import { PointManager } from "../manager/pointManager";
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 import { PlayerDetailE } from "./playerDetailE";
 
@@ -21,14 +22,16 @@ const RANKING_CONFIG = {
 	AVATAR_SIZE: 40,
 	NAME_X_OFFSET: 100,
 	SCORE_X_OFFSET: 300,
-	DETAIL_BUTTON_WIDTH: 80,
-	DETAIL_BUTTON_HEIGHT: 30,
+	DETAIL_BUTTON_WIDTH: 120,
+	DETAIL_BUTTON_HEIGHT: 60,
 
 	// Colors
 	BACKGROUND_COLOR: "#ecf0f1",
 	HEADER_COLOR: "#2c3e50",
 	RANK_ITEM_COLOR: "white",
 	RANK_BORDER_COLOR: "#bdc3c7",
+	SELF_BORDER_COLOR: "#e74c3c",
+	SELF_BORDER_WIDTH: 6,
 	GOLD_COLOR: "#f1c40f",
 	SILVER_COLOR: "#95a5a6",
 	BRONZE_COLOR: "#cd7f32",
@@ -203,7 +206,7 @@ export class PlayerRankingE extends g.E {
 		const gameStats = this.calculateGameStatistics();
 		const statsText = new g.Label({
 			scene: this.scene,
-			text: `達成タスク: ${gameStats.totalTasks}個 | 取得アイテム: ${gameStats.totalItems}個`,
+			text: `達成タスク: ${gameStats.totalTasks}個`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
@@ -247,14 +250,19 @@ export class PlayerRankingE extends g.E {
 			y: yPosition
 		});
 
-		// Background with border
+		// Check if this is the current player
+		const isCurrentPlayer = player.id === this.gameContext.currentPlayer.id;
+
+		// Background with border (different style for current player)
+		const borderWidth = isCurrentPlayer ? RANKING_CONFIG.SELF_BORDER_WIDTH : 2;
+		const borderColor = isCurrentPlayer ? RANKING_CONFIG.SELF_BORDER_COLOR : RANKING_CONFIG.RANK_BORDER_COLOR;
 		const border = new g.FilledRect({
 			scene: this.scene,
-			width: container.width + 4,
-			height: container.height + 4,
-			x: -2,
-			y: -2,
-			cssColor: RANKING_CONFIG.RANK_BORDER_COLOR
+			width: container.width + (borderWidth * 2),
+			height: container.height + (borderWidth * 2),
+			x: -borderWidth,
+			y: -borderWidth,
+			cssColor: borderColor
 		});
 
 		const background = new g.FilledRect({
@@ -294,19 +302,24 @@ export class PlayerRankingE extends g.E {
 		});
 		container.append(avatar);
 
-		// Player name
+		// Player name with width adjustment
+		const displayName = isCurrentPlayer ? `${player.profile.name} （あなた）` : player.profile.name;
 		const nameLabel = new g.Label({
 			scene: this.scene,
-			text: player.profile.name + `(${player.id})`,
+			text: displayName,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
 				size: 18,
-				fontColor: RANKING_CONFIG.RANK_TEXT_COLOR
+				fontColor: RANKING_CONFIG.RANK_TEXT_COLOR,
+				fontWeight: isCurrentPlayer ? "bold" : "normal"
 			}),
 			x: RANKING_CONFIG.NAME_X_OFFSET,
 			y: 20
 		});
+		// Adjust name width to fit between NAME_X_OFFSET and SCORE_X_OFFSET
+		const maxNameWidth = RANKING_CONFIG.SCORE_X_OFFSET - RANKING_CONFIG.NAME_X_OFFSET - 10;
+		adjustLabelWidthToFit(nameLabel, maxNameWidth);
 		container.append(nameLabel);
 
 		// Player score
@@ -329,12 +342,11 @@ export class PlayerRankingE extends g.E {
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			text: "詳細",
-			fontSize: 14,
+			fontSize: 24,
 			fontFamily: "sans-serif",
 			width: RANKING_CONFIG.DETAIL_BUTTON_WIDTH,
 			height: RANKING_CONFIG.DETAIL_BUTTON_HEIGHT,
 			x: container.width - RANKING_CONFIG.DETAIL_BUTTON_WIDTH - 20,
-			y: 15,
 			backgroundColor: "#3498db",
 			textColor: "white",
 			name: `player_detail_button_${player.id}`,

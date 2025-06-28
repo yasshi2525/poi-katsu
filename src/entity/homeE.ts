@@ -106,13 +106,13 @@ export class HomeE extends g.E {
 			id: "welcome_ad",
 			priority: 1,
 			enabled: true,
-			title: "ポイ活ウォーズへようこそ！",
+			title: "[PR] ポイ活ウォーズへようこそ！",
 			subtitle: "広告をタップしてさらにポイントゲット",
-			saleTag: "タップで100ptゲット！",
-			backgroundColor: "#3498db",
+			saleTag: `タップで${POINT_CONSTANTS.AD_BANNER_CLICK_REWARD}pt！`,
+			backgroundColor: "#c2185b",
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
-			saleTagColor: "#f1c40f",
+			saleTagColor: "#ffa000",
 			clickHandler: (context: BannerContext) => {
 				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Welcome ad banner click");
 			}
@@ -121,13 +121,13 @@ export class HomeE extends g.E {
 			id: "shopping_recommend",
 			priority: 2,
 			enabled: true,
-			title: "通販でもっとポイント！",
+			title: "[PR] 通販でもっとポイント！",
 			subtitle: "商品購入でポイント大量獲得",
 			saleTag: "お得！",
-			backgroundColor: "#e67e22",
+			backgroundColor: "#c2185b",
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
-			saleTagColor: "#f39c12",
+			saleTagColor: "#ffa000",
 			clickHandler: (context: BannerContext) => {
 				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Shopping recommendation banner click");
 				context.executeTask("shopping");
@@ -137,13 +137,13 @@ export class HomeE extends g.E {
 			id: "sale_notification",
 			priority: 3,
 			enabled: true,
-			title: "セール開催中！",
+			title: "[PR] セール開催中！",
 			subtitle: "今すぐ通販をチェック",
 			saleTag: "限定！",
-			backgroundColor: "#e74c3c",
+			backgroundColor: "#c2185b",
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
-			saleTagColor: "#f1c40f",
+			saleTagColor: "#ffa000",
 			clickHandler: (context: BannerContext) => {
 				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "Sale notification banner click");
 				context.switchToShop();
@@ -153,13 +153,13 @@ export class HomeE extends g.E {
 			id: "sns_recommend",
 			priority: 4,
 			enabled: true,
-			title: "SNS連携でもっとお得！",
+			title: "[PR] SNS連携でもっとお得！",
 			subtitle: "商品シェアでポイント還元",
 			saleTag: "シェア！",
-			backgroundColor: "#9b59b6",
+			backgroundColor: "#c2185b",
 			titleColor: "white",
 			subtitleColor: "#ecf0f1",
-			saleTagColor: "#f1c40f",
+			saleTagColor: "#ffa000",
 			clickHandler: (context: BannerContext) => {
 				context.addScore(POINT_CONSTANTS.AD_BANNER_CLICK_REWARD, "ads", "SNS recommendation banner click");
 				context.executeTask("sns");
@@ -1292,11 +1292,8 @@ export class HomeE extends g.E {
 		// Add OK button to modal
 		this.currentModal.replaceCloseButton({
 			text: "OK",
-			backgroundColor: "#2980b9",
-			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
+			width: 180,
+			height: 120,
 			onComplete: () => {
 				// Complete task when OK is pressed
 				this.completeShoppingTaskFromProfile(shoppingTask);

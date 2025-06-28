@@ -176,7 +176,7 @@ export class TimelineE extends g.E {
 						priceText: { x: 50, y: 40, width: 200, height: 12 },
 						likeBtn: { x: 50, y: 60, width: 50, height: 12 },
 						commentBtn: { x: 120, y: 60, width: 70, height: 12 },
-						buyBtn: { x: 510, y: 25, width: 80, height: 25 }
+						buyBtn: { x: 510, y: 5, width: 120, height: 80 }
 					}
 				}
 			}
@@ -495,7 +495,7 @@ export class TimelineE extends g.E {
 				y: buyBtnLayout.y,
 				backgroundColor: isAlreadyOwned ? "#95a5a6" : "#e67e22",
 				textColor: "white",
-				fontSize: 12,
+				fontSize: 24,
 				onComplete: (postId: string) => this.handleAffiliatePurchase(postId)
 			});
 
