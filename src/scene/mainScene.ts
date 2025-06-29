@@ -6,6 +6,7 @@ import { SharedPostData } from "../data/sharedPostData";
 import { AgreementE } from "../entity/agreementE";
 import { HeaderE } from "../entity/headerE";
 import { HomeE } from "../entity/homeE";
+import { InteractionBlockerManager } from "../manager/interactionBlockerManager";
 import { MarketManager } from "../manager/marketManager";
 import { PointManager } from "../manager/pointManager";
 import { BaseScene } from "./baseScene";
@@ -27,6 +28,7 @@ export class MainScene extends BaseScene {
 	private home?: HomeE;
 	private marketManager?: MarketManager;
 	private pointManager?: PointManager;
+	private interactionBlockerManager?: InteractionBlockerManager;
 	private gameContext: GameContext;
 	private interactionBlocker?: g.E;
 	private pendingSharedPosts: SharedPostData[] = []; // Store posts received before HomeE is created
@@ -68,6 +70,9 @@ export class MainScene extends BaseScene {
 		}
 
 		this.onLoad.add(() => {
+			// Initialize InteractionBlockerManager for centralized user interaction control
+			this.interactionBlockerManager = new InteractionBlockerManager(this, this.game.width, this.game.height);
+
 			// Initialize MarketManager for price management
 			this.marketManager = new MarketManager(this, this.gameContext);
 			this.marketManager.initialize();
@@ -83,10 +88,8 @@ export class MainScene extends BaseScene {
 				}
 			});
 			this.gameContext.on("timeEnded", () => {
-				// Time reached zero - block all player interactions
-				this.blockAllInteractions();
-				// Trigger automatic settlement app reveal and execution
-				this.triggerAutomaticSettlement();
+				// Time reached zero - start automatic settlement process with user interaction control
+				this.handleTimeEnded();
 			});
 
 			this.onUpdate.add(() =>
@@ -184,6 +187,43 @@ export class MainScene extends BaseScene {
 	}
 
 	/**
+	 * Gets the InteractionBlockerManager instance
+	 */
+	getInteractionBlockerManager(): InteractionBlockerManager | undefined {
+		return this.interactionBlockerManager;
+	}
+
+	/**
+	 * Blocks user interaction with specified blocker ID
+	 * @param blockerId Unique identifier for this blocking request
+	 * @param reason Optional reason for blocking (for debugging)
+	 */
+	blockUserInteraction(blockerId: string, reason?: string): void {
+		if (this.interactionBlockerManager) {
+			this.interactionBlockerManager.blockInteraction(blockerId, reason);
+		}
+	}
+
+	/**
+	 * Unblocks user interaction for specified blocker ID
+	 * @param blockerId Unique identifier for this blocking request
+	 */
+	unblockUserInteraction(blockerId: string): void {
+		if (this.interactionBlockerManager) {
+			this.interactionBlockerManager.unblockInteraction(blockerId);
+		}
+	}
+
+	/**
+	 * Checks if any user interactions are currently blocked
+	 * @returns True if any blocking requests are active
+	 */
+	isUserInteractionBlocked(): boolean {
+		return this.interactionBlockerManager?.isAnyBlocked() ?? false;
+	}
+
+
+	/**
 	 * Transitions to ranking scene when settlement is completed
 	 */
 	transitionToRanking(): void {
@@ -254,19 +294,42 @@ export class MainScene extends BaseScene {
 	}
 
 	/**
-	 * Force closes all modals across the scene when time reaches zero
+	 * Handles time ended event with proper user interaction control
 	 */
-	private forceCloseAllModals(): void {
-		if (this.home) {
-			this.home.forceCloseAllModals();
+	private handleTimeEnded(): void {
+		// 1. Block all user interactions immediately
+		this.blockUserInteraction("timeEnded", "Game time ended - preparing for settlement");
+
+		// 2. Wait for other locks to be cleared, then proceed
+		this.waitForOtherLocksAndProceed();
+	}
+
+	/**
+	 * Waits for other interaction locks to be cleared, then proceeds with settlement
+	 */
+	private waitForOtherLocksAndProceed(): void {
+		if (!this.interactionBlockerManager) return;
+
+		// Check if only timeEnded lock is active
+		const activeBlockers = this.interactionBlockerManager.getActiveBlockers();
+		const hasOtherLocks = activeBlockers.some(blockerId => blockerId !== "timeEnded");
+
+		if (hasOtherLocks) {
+			// Other locks exist - wait 100ms and check again
+			this.setTimeout(() => {
+				this.waitForOtherLocksAndProceed();
+			}, 100);
+		} else {
+			// Only timeEnded lock remains - proceed with settlement
+			this.proceedWithAutomaticSettlement();
 		}
 	}
 
 	/**
-	 * Triggers automatic settlement when time reaches zero
+	 * Proceeds with automatic settlement after all other locks are cleared
 	 */
-	private triggerAutomaticSettlement(): void {
-		// Force close all modals when time reaches zero
+	private proceedWithAutomaticSettlement(): void {
+		// 3. Force close all modals
 		this.forceCloseAllModals();
 
 		if (!this.home) {
@@ -277,16 +340,25 @@ export class MainScene extends BaseScene {
 			return;
 		}
 
-		// First ensure we're on the home screen before revealing settlement app
+		// 4. Return to home screen if viewing other screens
 		this.home.returnToHomeIfNeeded();
 
-		// Then trigger automatic settlement app reveal and opening
+		// 5. Trigger automatic settlement app reveal and opening
 		this.home.triggerAutomaticSettlement();
 
 		// Start fixed timer for ranking transition (independent of settlement animation completion)
 		this.settlementTimer = this.setTimeout(() => {
 			this.transitionToRanking();
 		}, SETTLEMENT_CONFIG.FIXED_SETTLEMENT_DURATION);
+	}
+
+	/**
+	 * Force closes all modals across the scene when time reaches zero
+	 */
+	private forceCloseAllModals(): void {
+		if (this.home) {
+			this.home.forceCloseAllModals();
+		}
 	}
 
 
@@ -461,7 +533,9 @@ export class MainScene extends BaseScene {
 					gameContext: this.gameContext!,
 					marketManager: this.marketManager!,
 					pointManager: this.pointManager!,
-					updateCurrentPlayerScore: (score: number) => this.updateCurrentPlayerScore(score)
+					updateCurrentPlayerScore: (score: number) => this.updateCurrentPlayerScore(score),
+					blockUserInteraction: (blockerId: string, reason?: string) => this.blockUserInteraction(blockerId, reason),
+					unblockUserInteraction: (blockerId: string) => this.unblockUserInteraction(blockerId)
 				});
 
 				// Add any pending shared posts that were received before HomeE was created

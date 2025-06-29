@@ -42,7 +42,8 @@ export abstract class BaseScene extends g.Scene {
 
 	private swipe(typ: "in" | "out", onComplete?: g.HandlerFunction<void>): void {
 		if (this.game.focusingCamera) {
-			throw new Error("Camera is already set. Cannot swipe.");
+			console.warn("Camera is already set. Cannot swipe.");
+			return;
 		}
 		const camera = new g.Camera2D({
 			x: typ === "in" ? -this.game.width : 0,

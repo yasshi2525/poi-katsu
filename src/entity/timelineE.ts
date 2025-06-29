@@ -15,6 +15,9 @@ const ANIMATION_CONFIG = {
 	POST_SHIFT_DURATION: 400,
 	POST_FADE_IN_DURATION: 600,
 	POST_FADE_IN_DELAY: 200,
+	// Batch animation configuration
+	BATCH_POST_STAGGER: 150, // 複数投稿の段階的アニメーション間隔
+	BATCH_POST_MAX_SHOW: 3, // 一度に表示アニメーションする最大投稿数
 } as const;
 
 /**
@@ -80,6 +83,10 @@ export class TimelineE extends g.E {
 	private lastScrollY: number = 0;
 	private isScrolling: boolean = false;
 	private isAnimating: boolean = false;
+	// Batch processing properties
+	private batchPendingPosts: SharedPostData[] = [];
+	private batchProcessing: boolean = false;
+	private batchTimer?: g.TimerIdentifier;
 
 	/**
 	 * Creates a new Timeline instance
@@ -106,14 +113,12 @@ export class TimelineE extends g.E {
 	 * @param sharedPost The shared post data
 	 */
 	addSharedPost(sharedPost: SharedPostData): void {
-		this.sharedPosts.unshift(sharedPost); // Add to beginning
+		// Add to batch processing queue
+		this.batchPendingPosts.push(sharedPost);
 
-		// Only animate if timeline is visible, otherwise add post silently
-		if (this.opacity > 0) {
-			this.animateNewPost();
-		} else {
-			// Timeline is hidden, add post without animation to preserve existing content
-			this.addPostSilently();
+		// Start batch processing if not already in progress
+		if (!this.batchProcessing && !this.batchTimer) {
+			this.startBatchProcessing();
 		}
 	}
 
@@ -143,6 +148,145 @@ export class TimelineE extends g.E {
 	 */
 	onItemPurchasedExternal(item: ItemData): void {
 		this.updateAllButtonsForItem(item.id);
+	}
+
+	/**
+	 * Starts batch processing timer
+	 */
+	private startBatchProcessing(): void {
+		this.batchTimer = this.scene.setTimeout(() => {
+			this.processBatchedPosts();
+		}, ANIMATION_CONFIG.BATCH_POST_STAGGER);
+	}
+
+	/**
+	 * Processes all batched posts with improved animation
+	 */
+	private processBatchedPosts(): void {
+		if (this.batchProcessing || this.batchPendingPosts.length === 0) {
+			return;
+		}
+
+		this.batchProcessing = true;
+		this.batchTimer = undefined;
+
+		// Get posts to process (in reverse order for proper timeline placement)
+		const postsToProcess = this.batchPendingPosts.reverse();
+		this.batchPendingPosts = [];
+
+		// Add all posts to data structure first
+		this.sharedPosts.unshift(...postsToProcess);
+
+		// Only animate if timeline is visible
+		if (this.opacity > 0) {
+			this.animateBatchedPosts(postsToProcess);
+		} else {
+			// Timeline is hidden, add posts without animation
+			this.addBatchedPostsSilently(postsToProcess);
+			this.batchProcessing = false;
+		}
+	}
+
+	/**
+	 * Animates multiple posts being added with staggered timing
+	 */
+	private animateBatchedPosts(posts: SharedPostData[]): void {
+		// Disable scrolling during animation
+		this.isAnimating = true;
+
+		// Create loading overlay during animation
+		this.createTimelineLoadingOverlay();
+
+		// Create timeline for batch animation
+		const timeline = new Timeline(this.scene);
+
+		// First, shift existing posts down by the number of new posts
+		const shiftDistance = posts.length * 90; // 90px per post
+		this.timelineItems.forEach((item) => {
+			const newY = item.y + shiftDistance;
+			timeline.create(item).to({ y: newY }, ANIMATION_CONFIG.POST_SHIFT_DURATION);
+		});
+
+		// After shift animation, create and fade in new posts with staggered timing
+		timeline.create(this).wait(ANIMATION_CONFIG.POST_SHIFT_DURATION).call(() => {
+			this.addBatchedPostsWithStagger(posts);
+		});
+	}
+
+	/**
+	 * Adds batched posts with staggered fade-in animation
+	 */
+	private addBatchedPostsWithStagger(posts: SharedPostData[]): void {
+		// Limit the number of posts that get animated to prevent overwhelming the UI
+		const postsToAnimate = posts.slice(0, ANIMATION_CONFIG.BATCH_POST_MAX_SHOW);
+		const postsToAddSilently = posts.slice(ANIMATION_CONFIG.BATCH_POST_MAX_SHOW);
+
+		// Add non-animated posts silently first
+		postsToAddSilently.forEach((post, index) => {
+			const postY = index * 90 + this.scrollOffset;
+			const newPost = this.createAffiliateTimelineItem(post, index, postY);
+			this.timelineItems.unshift(newPost);
+		});
+
+		// Animate the remaining posts with staggered timing
+		postsToAnimate.forEach((post, index) => {
+			const delay = index * ANIMATION_CONFIG.BATCH_POST_STAGGER;
+			const postIndex = postsToAddSilently.length + index;
+			this.scene.setTimeout(() => {
+				const postY = postIndex * 90 + this.scrollOffset;
+				const newPost = this.createAffiliateTimelineItem(post, postIndex, postY);
+
+				// Start with opacity 0 for fade-in effect
+				newPost.opacity = 0;
+				newPost.modified();
+				this.timelineItems.unshift(newPost);
+
+				// Fade in the new post
+				const fadeTimeline = new Timeline(this.scene);
+				fadeTimeline.create(newPost)
+					.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
+					.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION)
+					.call(() => {
+						// If this is the last post being animated, complete the batch
+						if (index === postsToAnimate.length - 1) {
+							this.completeBatchAnimation();
+						}
+					});
+			}, delay);
+		});
+
+		// If no posts were animated, complete immediately
+		if (postsToAnimate.length === 0) {
+			this.completeBatchAnimation();
+		}
+	}
+
+	/**
+	 * Adds batched posts without animation (when timeline is hidden)
+	 */
+	private addBatchedPostsSilently(posts: SharedPostData[]): void {
+		posts.forEach((post, index) => {
+			const postY = index * 90 + this.scrollOffset;
+			const newPost = this.createAffiliateTimelineItem(post, index, postY);
+			this.timelineItems.unshift(newPost);
+		});
+
+		// Shift all existing posts down
+		this.timelineItems.forEach((item, index) => {
+			if (index >= posts.length) {
+				item.y = index * 90 + this.scrollOffset;
+				item.modified();
+			}
+		});
+	}
+
+	/**
+	 * Completes batch animation processing
+	 */
+	private completeBatchAnimation(): void {
+		this.isAnimating = false;
+		this.batchProcessing = false;
+		this.destroyTimelineLoadingOverlay();
 	}
 
 	/**
@@ -370,6 +514,11 @@ export class TimelineE extends g.E {
 			const postItem = this.createTimelineItem(item.user, item.action, item.reactions, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
 			itemIndex++;
+		});
+
+		// Add all timeline items to scroll container
+		this.timelineItems.forEach(item => {
+			this.scrollContainer!.append(item);
 		});
 
 		// Calculate max scroll offset based on content height

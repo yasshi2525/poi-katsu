@@ -3,7 +3,7 @@
 ニコ生ゲーム「ポイ活ウォーズ」のソースコードです \
 ライセンスの関係から一部の画像と音声が投稿されたゲームと異なります
 
-→ [仕様書](specification/index.md)、[モジュール構成](specification/plan.md)、[未実装機能](specification/unimplemented_feature.md)
+→ [仕様書](specification/index.md)、[モジュール構成](specification/plan.md)、[未実装機能](specification/unimplemented_feature.md)、[ユーザー操作フロー](specification/user-interaction-flows.md)
 
 ご自身のゲーム開発時の参考になれば幸いです。 \
 改造、改造ゲームの投稿はご自由にどうぞ！報告やクレジット表示は不要ですが、もししていただける場合は下記の通りお願いします。

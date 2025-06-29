@@ -278,6 +278,11 @@
 			"path": "image/icon.png",
 			"width": 320,
 			"height": 320
+		},
+		"interactionBlockerManager": {
+			"type": "script",
+			"path": "script/manager/interactionBlockerManager.js",
+			"global": true
 		}
 	},
 	"environment": {

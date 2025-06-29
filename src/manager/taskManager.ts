@@ -15,7 +15,7 @@ export interface TaskExecutionContext {
 	onScoreAdd: (points: number, taskData: TaskData) => void;
 	onProfileSwitch: () => void;
 	onTimelineReveal: () => void;
-	onShopAppReveal: () => void;
+	onShopAppReveal: (onComplete?: () => void) => void;
 	onModalCreate: (modal: ModalE<string>) => void;
 	onModalClose: (taskId?: string) => void;
 	onAchievementShow: (task: TaskData, notificationType?: string) => void;
@@ -39,6 +39,7 @@ export interface TaskExecutionResult {
  */
 export class TaskManager {
 	private context: TaskExecutionContext;
+	private pendingProfileCallback?: () => void;
 
 	// Task definitions - centralized task data using constants
 	private readonly tasks: TaskData[] = [
@@ -123,20 +124,21 @@ export class TaskManager {
 	/**
 	 * Executes a task based on its ID
 	 * @param taskData The task data to execute
+	 * @param onComplete Optional callback to execute after task completion
 	 * @returns Execution result
 	 */
-	executeTask(taskData: TaskData): TaskExecutionResult {
+	executeTask(taskData: TaskData, onComplete?: () => void): TaskExecutionResult {
 		switch (taskData.id) {
 			case "profile":
-				return this.executeProfileTask(taskData);
+				return this.executeProfileTask(taskData, onComplete);
 			case "sns":
-				return this.executeSnsTask(taskData);
+				return this.executeSnsTask(taskData, onComplete);
 			case "shopping":
-				return this.executeShoppingTask(taskData);
+				return this.executeShoppingTask(taskData, onComplete);
 			case "novel_collection":
-				return this.executeCollectionTask(taskData, "novel");
+				return this.executeCollectionTask(taskData, "novel", onComplete);
 			case "manga_collection":
-				return this.executeCollectionTask(taskData, "manga");
+				return this.executeCollectionTask(taskData, "manga", onComplete);
 			default:
 				return {
 					success: false,
@@ -183,6 +185,12 @@ export class TaskManager {
 
 			// Add score reward after completion
 			this.context.onScoreAdd(profileTask.rewardPoints, profileTask);
+
+			// Call pending callback if exists
+			if (this.pendingProfileCallback) {
+				this.pendingProfileCallback();
+				this.pendingProfileCallback = undefined;
+			}
 		}
 	}
 
@@ -190,8 +198,14 @@ export class TaskManager {
 	/**
 	 * Executes profile task (screen switching flow)
 	 */
-	private executeProfileTask(_taskData: TaskData): TaskExecutionResult {
+	private executeProfileTask(_taskData: TaskData, onComplete?: () => void): TaskExecutionResult {
 		this.context.onProfileSwitch();
+		// Profile task completion is handled by HomeE when returning from profile editor
+		// onComplete callback will be called by the ProfileEditorE onComplete flow
+		if (onComplete) {
+			// Store the callback for later use when profile editing completes
+			this.pendingProfileCallback = onComplete;
+		}
 		return {
 			success: true,
 			message: "Profile editor opened"
@@ -201,8 +215,8 @@ export class TaskManager {
 	/**
 	 * Executes SNS task (modal flow with timeline unlock)
 	 */
-	private executeSnsTask(taskData: TaskData): TaskExecutionResult {
-		this.showTimelineUnlockModal(taskData);
+	private executeSnsTask(taskData: TaskData, onComplete?: () => void): TaskExecutionResult {
+		this.showTimelineUnlockModal(taskData, onComplete);
 		return {
 			success: true,
 			message: "SNS task modal shown",
@@ -213,8 +227,8 @@ export class TaskManager {
 	/**
 	 * Executes shopping task (modal flow with shop app unlock)
 	 */
-	private executeShoppingTask(taskData: TaskData): TaskExecutionResult {
-		this.showShoppingUnlockModal(taskData);
+	private executeShoppingTask(taskData: TaskData, onComplete?: () => void): TaskExecutionResult {
+		this.showShoppingUnlockModal(taskData, onComplete);
 		return {
 			success: true,
 			message: "Shopping task modal shown",
@@ -225,8 +239,8 @@ export class TaskManager {
 	/**
 	 * Executes collection task (shows collection explanation modal)
 	 */
-	private executeCollectionTask(taskData: TaskData, category: string): TaskExecutionResult {
-		this.showCollectionModal(taskData, category);
+	private executeCollectionTask(taskData: TaskData, category: string, onComplete?: () => void): TaskExecutionResult {
+		this.showCollectionModal(taskData, category, onComplete);
 		return {
 			success: true,
 			message: `Collection task modal shown for ${category}`,
@@ -246,7 +260,7 @@ export class TaskManager {
 	/**
 	 * Shows modal explaining timeline feature unlock
 	 */
-	private showTimelineUnlockModal(taskData: TaskData): void {
+	private showTimelineUnlockModal(taskData: TaskData, onComplete?: () => void): void {
 		// Close any existing modal first
 		this.context.onModalClose();
 
@@ -265,7 +279,7 @@ export class TaskManager {
 		});
 
 		// Add OK button to modal
-		this.addTimelineModalButton(modal, taskData);
+		this.addTimelineModalButton(modal, taskData, onComplete);
 
 		// Notify context to manage modal
 		this.context.onModalCreate(modal);
@@ -274,7 +288,7 @@ export class TaskManager {
 	/**
 	 * Shows modal explaining shopping app feature unlock
 	 */
-	private showShoppingUnlockModal(taskData: TaskData): void {
+	private showShoppingUnlockModal(taskData: TaskData, onComplete?: () => void): void {
 		// Close any existing modal first
 		this.context.onModalClose();
 
@@ -293,7 +307,7 @@ export class TaskManager {
 		});
 
 		// Add OK button to modal
-		this.addShoppingModalButton(modal, taskData);
+		this.addShoppingModalButton(modal, taskData, onComplete);
 
 		// Notify context to manage modal
 		this.context.onModalCreate(modal);
@@ -302,13 +316,17 @@ export class TaskManager {
 	/**
 	 * Adds OK button to timeline unlock modal
 	 */
-	private addTimelineModalButton(modal: ModalE<string>, taskData: TaskData): void {
+	private addTimelineModalButton(modal: ModalE<string>, taskData: TaskData, onComplete?: () => void): void {
 		modal.replaceCloseButton({
 			text: "OK",
 			width: 180,
 			height: 120,
 			onComplete: () => {
 				this.completeSnsTask(taskData);
+				// Call the completion callback to unblock interactions
+				if (onComplete) {
+					onComplete();
+				}
 			}
 		});
 	}
@@ -316,13 +334,13 @@ export class TaskManager {
 	/**
 	 * Adds OK button to shopping unlock modal
 	 */
-	private addShoppingModalButton(modal: ModalE<string>, taskData: TaskData): void {
+	private addShoppingModalButton(modal: ModalE<string>, taskData: TaskData, onComplete?: () => void): void {
 		modal.replaceCloseButton({
 			text: "OK",
 			width: 180,
 			height: 120,
 			onComplete: () => {
-				this.completeShoppingTask(taskData);
+				this.completeShoppingTask(taskData, onComplete);
 			}
 		});
 	}
@@ -346,13 +364,18 @@ export class TaskManager {
 	/**
 	 * Completes shopping task with shop app reveal
 	 */
-	private completeShoppingTask(taskData: TaskData): void {
+	private completeShoppingTask(taskData: TaskData, onComplete?: () => void): void {
 		// Complete the task
 		this.completeTask(taskData.id);
 
+		// TODO: Block user interactions until shop automatically opens to prevent animation conflicts
+		// if (this.context.onBlockUserInteraction) {
+		//	this.context.onBlockUserInteraction("shoppingTaskCompletion", "Shopping task completion - waiting for automatic shop opening");
+		// }
+
 		// Reveal shop app with delay to ensure modal is properly closed
 		this.context.scene.setTimeout(() => {
-			this.context.onShopAppReveal();
+			this.context.onShopAppReveal(onComplete);
 		}, TaskManager.ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
 
 		// Refresh task list to show collection tasks after shop unlock
@@ -367,7 +390,7 @@ export class TaskManager {
 	/**
 	 * Shows modal explaining collection task
 	 */
-	private showCollectionModal(taskData: TaskData, category: string): void {
+	private showCollectionModal(taskData: TaskData, category: string, onComplete?: () => void): void {
 		// Close any existing modal first
 		this.context.onModalClose();
 
@@ -394,7 +417,7 @@ export class TaskManager {
 		});
 
 		// Add OK button to modal with reactivate functionality
-		this.addCollectionModalButton(modal, taskData);
+		this.addCollectionModalButton(modal, taskData, onComplete);
 
 		// Notify context to manage modal
 		this.context.onModalCreate(modal);
@@ -403,14 +426,13 @@ export class TaskManager {
 	/**
 	 * Adds OK button to collection modal
 	 */
-	private addCollectionModalButton(modal: ModalE<string>, taskData: TaskData): void {
+	private addCollectionModalButton(modal: ModalE<string>, taskData: TaskData, onComplete?: () => void): void {
 		modal.replaceCloseButton({
 			text: "了解",
 			backgroundColor: "#9b59b6",
 			textColor: "white",
-			fontSize: 14,
-			width: 80,
-			height: 35,
+			width: 180,
+			height: 120,
 			onComplete: () => {
 				// Manual call to onClose logic since replaceCloseButton bypasses the original onClose
 				this.context.onModalClose();
@@ -418,6 +440,8 @@ export class TaskManager {
 				if (this.context.onTaskButtonReactivate) {
 					this.context.onTaskButtonReactivate(taskData.id);
 				}
+				// Call completion callback
+				if (onComplete) onComplete();
 				// Modal closes automatically, no task completion needed
 				// Task will be completed automatically when collection is finished
 			}

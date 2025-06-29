@@ -76,10 +76,11 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			// Verify post was added (timeline should recreate layout)
-			expect(timeline.children?.length).toBeGreaterThan(1); // Header + at least one post
+			const scrollContainer = (timeline as any).scrollContainer as g.E;
+			expect(scrollContainer.children?.length).toBeGreaterThan(4); // Default items + at least one shared post
 		});
 
 		it("should display shared posts with correct information", () => {
@@ -101,7 +102,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			// Check that timeline contains elements (detailed UI testing would require more complex setup)
 			expect(timeline.children?.length).toBeGreaterThan(0);
@@ -136,10 +137,11 @@ describe("TimelineE", () => {
 				sharedAt: Date.now() + index * 1000,
 			}));
 
-			posts.forEach(post => timeline.addSharedPost(post));
+			posts.forEach(post => timeline.addSharedPostForTesting(post));
 
 			// Timeline should handle multiple posts
-			expect(timeline.children?.length).toBeGreaterThan(posts.length);
+			const scrollContainer = (timeline as any).scrollContainer as g.E;
+			expect(scrollContainer.children?.length).toBeGreaterThan(4 + posts.length - 1); // Default items + shared posts
 		});
 	});
 
@@ -165,7 +167,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(testSharedPost);
+			timeline.addSharedPostForTesting(testSharedPost);
 		});
 
 		it("should process valid affiliate purchase", () => {
@@ -258,7 +260,7 @@ describe("TimelineE", () => {
 					sharedAt: Date.now(),
 				});
 
-				timeline.addSharedPost(sharedPost);
+				timeline.addSharedPostForTesting(sharedPost);
 
 				mockCheckPoints.mockReturnValue(1000);
 				mockCheckOwnership.mockReturnValue(false);
@@ -306,7 +308,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			mockCheckPoints.mockReturnValue(1000);
 			mockCheckOwnership.mockReturnValue(false);
@@ -422,7 +424,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			mockCheckPoints.mockReturnValue(1000);
 			mockCheckOwnership.mockReturnValue(false);
@@ -457,7 +459,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			// Start with sufficient points
 			mockCheckPoints.mockReturnValue(100);
@@ -522,7 +524,7 @@ describe("TimelineE", () => {
 				sharedAt: Date.now(),
 			});
 
-			timeline.addSharedPost(sharedPost);
+			timeline.addSharedPostForTesting(sharedPost);
 
 			// Layout should be refreshed (children count may change)
 			const newChildren = timeline.children?.length || 0;

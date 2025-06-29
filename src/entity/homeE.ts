@@ -35,6 +35,10 @@ const ANIMATION_CONFIG = {
 	SNS_ACHIEVEMENT_POSITION_FROM_RIGHT: 370, // Position for SNS achievement notification
 	SNS_ACHIEVEMENT_Y_OFFSET: 150, // Y position offset for SNS notification
 	MODAL_CLOSE_DELAY: 50, // Delay before timeline reveal to ensure modal is closed
+	// Post queuing system configuration
+	POST_BATCH_INTERVAL: 3000, // 投稿をまとめて処理する間隔（3秒）
+	POST_BATCH_ANIMATION_STAGGER: 150, // 連続投稿アニメーションの間隔
+	POST_BATCH_MAX_SIZE: 5, // 一度に処理する最大投稿数
 } as const;
 
 /**
@@ -55,6 +59,10 @@ export interface HomeParameterObject extends g.EParameterObject {
 	pointManager: PointManager;
 	/** Function to update current player score in MainScene */
 	updateCurrentPlayerScore: (score: number) => void;
+	/** Function to block user interaction via MainScene */
+	blockUserInteraction?: (blockerId: string, reason?: string) => void;
+	/** Function to unblock user interaction via MainScene */
+	unblockUserInteraction?: (blockerId: string) => void;
 }
 
 /**
@@ -86,6 +94,8 @@ export class HomeE extends g.E {
 
 	// MainScene function callbacks
 	private updateCurrentPlayerScore!: (score: number) => void;
+	private blockUserInteraction?: (blockerId: string, reason?: string) => void;
+	private unblockUserInteraction?: (blockerId: string) => void;
 
 	// Screen state
 	private readonly screenWidth: number;
@@ -98,6 +108,11 @@ export class HomeE extends g.E {
 	// Affiliate system
 	private postIdCounter: number = 0;
 	private timestampCounter: number = 0;
+
+	// Post queuing system
+	private postQueue: Array<{item: ItemData; sharedPrice: number; queuedAt: number}> = [];
+	private batchProcessingTimer?: g.TimerIdentifier;
+	private isProcessingBatch: boolean = false;
 
 
 	// Banner data
@@ -182,6 +197,8 @@ export class HomeE extends g.E {
 		this.marketManager = options.marketManager;
 		this.pointManager = options.pointManager;
 		this.updateCurrentPlayerScore = options.updateCurrentPlayerScore;
+		this.blockUserInteraction = options.blockUserInteraction;
+		this.unblockUserInteraction = options.unblockUserInteraction;
 
 		// Initialize managers
 		this.initializeItemManager();
@@ -372,7 +389,7 @@ export class HomeE extends g.E {
 			onScoreAdd: (points: number, taskData: TaskData) => this.addScore(points, "tasks", `${taskData.title} completion reward`),
 			onProfileSwitch: () => this.switchToProfileEditor(),
 			onTimelineReveal: () => this.revealTimeline(),
-			onShopAppReveal: () => this.appList.revealShopApp(),
+			onShopAppReveal: (onComplete) => this.appList.revealShopApp(true, onComplete),
 			onModalCreate: (modal: ModalE<string>) => {
 				this.currentModal = modal;
 				this.scene.append(modal);
@@ -417,7 +434,30 @@ export class HomeE extends g.E {
 			executeTask: (taskId: string) => {
 				const task = this.taskManager.getTask(taskId);
 				if (task) {
-					this.taskManager.executeTask(task);
+					// Block user interactions during banner task execution
+					if (this.blockUserInteraction) {
+						this.blockUserInteraction(`bannerTaskExecution_${taskId}`, `Executing banner task: ${taskId}`);
+					}
+
+					const deferCallback = (): void => {
+						// Unblock user interactions after task execution completes
+						if (this.unblockUserInteraction) {
+							this.unblockUserInteraction(`bannerTaskExecution_${taskId}`);
+						}
+					};
+
+					try {
+						const result = this.taskManager.executeTask(task, deferCallback);
+						if (!result.success) {
+							console.warn(`Banner task execution failed: ${result.message}`);
+							// Call completion callback even on failure
+							deferCallback();
+						}
+					} catch (error) {
+						console.error("Banner task execution error:", error);
+						// Call completion callback even on error
+						deferCallback();
+					}
 				}
 			},
 			switchToShop: () => this.switchToShop()
@@ -504,13 +544,32 @@ export class HomeE extends g.E {
 	 * @param taskData The task data for the executed task
 	 */
 	private onTaskExecute(taskData: TaskData): void {
+		// Block user interactions during task execution
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction(`taskExecution_${taskData.id}`, `Executing task: ${taskData.id}`);
+		}
+
+		const deferCallback = (): void => {
+			// Unblock user interactions after task execution completes
+			// Note: For profile task, this will be called only on JavaScript exception
+			// since profile task always returns success and unlock happens during screen transition
+			if (this.unblockUserInteraction) {
+				this.unblockUserInteraction(`taskExecution_${taskData.id}`);
+			}
+		};
+
 		try {
-			const result = this.taskManager.executeTask(taskData);
+			const result = this.taskManager.executeTask(taskData, deferCallback);
 			if (!result.success) {
 				console.warn(`Task execution failed: ${result.message}`);
+				// Call completion callback even on failure to unblock interactions
+				deferCallback();
 			}
+			// For profile task, success is guaranteed and unlock happens during screen transition
 		} catch (error) {
 			console.error("Task execution error:", error);
+			// Call completion callback even on JavaScript exception to unblock interactions
+			deferCallback();
 		}
 	}
 
@@ -519,25 +578,37 @@ export class HomeE extends g.E {
 	 * Switches from HomeE to ProfileEditorE with swipe animation
 	 */
 	private switchToProfileEditor(): void {
-		if (this.isProfileEditorVisible || this.profileEditor) return;
+		if (this.isProfileEditorVisible) return;
+
+		// Block user interactions during transition
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("profileTransition", "Transitioning to profile editor");
+		}
 
 		// Create overlay to prevent user interactions during animation
 		this.createSwipeOverlay();
 
-		// Create profile editor positioned off-screen to the right
-		this.profileEditor = new ProfileEditorE({
-			scene: this.scene,
-			gameContext: this.gameContext,
-			width: this.screenWidth,
-			height: this.screenHeight,
-			x: this.screenWidth, // Start off-screen to the right
-			y: 0,
-			onComplete: () => this.switchBackToHome(),
-			onProfileChange: () => this.updateHeaderWithCurrentProfile(),
-			onSnsConnectionRequest: () => this.handleSnsConnectionRequest(true), // true = from profile
-			onShoppingConnectionRequest: () => this.handleShoppingConnectionRequest(true) // true = from profile
-		});
-		this.append(this.profileEditor);
+		// Create or reuse profile editor positioned off-screen to the right
+		if (!this.profileEditor) {
+			this.profileEditor = new ProfileEditorE({
+				scene: this.scene,
+				gameContext: this.gameContext,
+				width: this.screenWidth,
+				height: this.screenHeight,
+				x: this.screenWidth, // Start off-screen to the right
+				y: 0,
+				onComplete: () => this.switchBackToHome(),
+				onProfileChange: () => this.updateHeaderWithCurrentProfile(),
+				onSnsConnectionRequest: () => this.handleSnsConnectionRequest(true), // true = from profile
+				onShoppingConnectionRequest: () => this.handleShoppingConnectionRequest(true) // true = from profile
+			});
+			this.append(this.profileEditor);
+		} else {
+			// Reposition existing profile editor off-screen for animation
+			this.profileEditor.x = this.screenWidth;
+			// Reactivate submit button for reuse
+			this.profileEditor.reactivateSubmitButton();
+		}
 
 		this.isProfileEditorVisible = true;
 
@@ -556,6 +627,14 @@ export class HomeE extends g.E {
 			.call(() => {
 				// Remove overlay when animation completes
 				this.removeSwipeOverlay();
+				// Unblock user interactions after profile transition completes
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("profileTransition");
+				}
+				// Unblock taskExecution_profile to allow user interactions in profile screen
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("taskExecution_profile");
+				}
 			});
 	}
 
@@ -577,16 +656,16 @@ export class HomeE extends g.E {
 			.call(() => {
 				// Update header section with current profile data from gameVars
 				this.updateHeaderWithCurrentProfile();
-				// Clean up profile editor after animation
-				if (this.profileEditor) {
-					this.profileEditor.destroy();
-					this.profileEditor = undefined;
-				}
+				// Keep profile editor instance but mark as not visible
 				this.isProfileEditorVisible = false;
 				// Complete the profile task using TaskManager
 				this.taskManager.completeProfileTask();
 				// Remove overlay when animation completes
 				this.removeSwipeOverlay();
+				// Unblock user interactions after profile transition completes
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("profileTransition");
+				}
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -767,6 +846,11 @@ export class HomeE extends g.E {
 	private switchToShop(): void {
 		if (this.isShopVisible) return;
 
+		// Block user interactions during transition
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("shopTransition", "Transitioning to shop");
+		}
+
 		// Create or reuse shop positioned off-screen to the right
 		if (!this.shop) {
 			// Use MarketManager from constructor
@@ -823,6 +907,10 @@ export class HomeE extends g.E {
 			.call(() => {
 				// Remove overlay when animation completes
 				this.removeSwipeOverlay();
+				// Unblock user interactions after transition completes
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("shopTransition");
+				}
 			});
 	}
 
@@ -831,6 +919,11 @@ export class HomeE extends g.E {
 	 */
 	private switchBackFromShop(): void {
 		if (!this.isShopVisible || !this.shop) return;
+
+		// Block user interactions during transition
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("shopBackTransition", "Transitioning back from shop");
+		}
 
 		// Create overlay to prevent user interactions during animation
 		this.createSwipeOverlay();
@@ -846,6 +939,10 @@ export class HomeE extends g.E {
 				this.isShopVisible = false;
 				// Remove overlay when animation completes
 				this.removeSwipeOverlay();
+				// Unblock user interactions after transition completes
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("shopBackTransition");
+				}
 			});
 
 		// Animate HomeE sections sliding back in from the left
@@ -1038,6 +1135,11 @@ export class HomeE extends g.E {
 		if (this.timeline && this.isTimelineVisible) {
 			this.timeline.onItemPurchasedExternal(item);
 		}
+
+		// Notify shop about the purchase to update button states
+		if (this.shop) {
+			this.shop.updateButtonStatesAfterPurchase(item.id);
+		}
 	}
 
 	/**
@@ -1070,11 +1172,75 @@ export class HomeE extends g.E {
 			return;
 		}
 
+		// Add to post queue instead of immediate processing
+		this.addToPostQueue(item, sharedPrice);
+	}
+
+	/**
+	 * Adds a post to the queue for batch processing
+	 */
+	private addToPostQueue(item: ItemData, sharedPrice: number): void {
+		const queuedAt = this.getNextTimestamp();
+		this.postQueue.push({ item, sharedPrice, queuedAt });
+
+		// Start batch processing timer if not already running
+		if (!this.batchProcessingTimer && !this.isProcessingBatch) {
+			this.startBatchProcessingTimer();
+		}
+	}
+
+	/**
+	 * Starts the batch processing timer
+	 */
+	private startBatchProcessingTimer(): void {
+		this.batchProcessingTimer = this.scene.setTimeout(() => {
+			this.processBatchedPosts();
+		}, ANIMATION_CONFIG.POST_BATCH_INTERVAL);
+	}
+
+	/**
+	 * Processes all queued posts in a batch with staggered animations
+	 */
+	private processBatchedPosts(): void {
+		if (this.isProcessingBatch || this.postQueue.length === 0) {
+			return;
+		}
+
+		this.isProcessingBatch = true;
+		this.batchProcessingTimer = undefined;
+
+		// Process up to maximum batch size
+		const postsToProcess = this.postQueue.splice(0, ANIMATION_CONFIG.POST_BATCH_MAX_SIZE);
+
+		// Process each post with staggered timing
+		postsToProcess.forEach((queuedPost, index) => {
+			const delay = index * ANIMATION_CONFIG.POST_BATCH_ANIMATION_STAGGER;
+			this.scene.setTimeout(() => {
+				this.createAndBroadcastPost(queuedPost.item, queuedPost.sharedPrice);
+			}, delay);
+		});
+
+		// Schedule processing completion after all posts are processed
+		const totalProcessingTime = (postsToProcess.length - 1) * ANIMATION_CONFIG.POST_BATCH_ANIMATION_STAGGER;
+		this.scene.setTimeout(() => {
+			this.isProcessingBatch = false;
+
+			// If there are still posts in queue, start another batch
+			if (this.postQueue.length > 0) {
+				this.startBatchProcessingTimer();
+			}
+		}, totalProcessingTime + 100); // Add small buffer
+	}
+
+	/**
+	 * Creates and broadcasts a single post (extracted from original handleProductShare)
+	 */
+	private createAndBroadcastPost(item: ItemData, sharedPrice: number): void {
 		// Get current player name from GameContext
 		const playerName = this.gameContext.currentPlayer.profile.name;
 
-		// Create shared post
-		const postId = `affiliate_${++this.postIdCounter}`;
+		// Create shared post with unique ID including player ID
+		const postId = `affiliate_${this.gameContext.currentPlayer.id}_${++this.postIdCounter}`;
 		const sharedPost = createSharedPost({
 			id: postId,
 			sharerId: this.gameContext.currentPlayer.id,
@@ -1098,7 +1264,7 @@ export class HomeE extends g.E {
 
 		this.scene.game.raiseEvent(new g.MessageEvent(message));
 
-		// Add to local timeline (since broadcast handler only processes messages from other players)
+		// Add to local timeline (batch animation will be handled automatically)
 		this.timeline.addSharedPost(sharedPost);
 	}
 
@@ -1173,9 +1339,21 @@ export class HomeE extends g.E {
 	 * @param fromProfile Whether this request is from profile screen (true) or shop screen (false)
 	 */
 	private handleSnsConnectionRequest(fromProfile: boolean = false): void {
+		// Block user interactions during SNS task execution
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("snsTaskExecution", "Executing SNS task");
+		}
+
+		const deferCallback = (): void => {
+			// Unblock user interactions after task execution completes
+			if (this.unblockUserInteraction) {
+				this.unblockUserInteraction("snsTaskExecution");
+			}
+		};
+
 		if (fromProfile) {
 			// From profile screen - execute task without screen transition
-			this.executeSnsTask();
+			this.executeSnsTask(deferCallback);
 		} else {
 			// From shop screen - go back to home first, then execute task
 			if (this.isShopVisible) {
@@ -1184,29 +1362,37 @@ export class HomeE extends g.E {
 				// Wait for shop-to-home animation to complete before executing SNS task
 				// This prevents layout issues caused by modal interference during animation
 				this.scene.setTimeout(() => {
-					this.executeSnsTask();
+					this.executeSnsTask(deferCallback);
 				}, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION + 50); // Small buffer for animation completion
 			} else {
 				// If not in shop, execute immediately
-				this.executeSnsTask();
+				this.executeSnsTask(deferCallback);
 			}
 		}
 	}
 
 	/**
 	 * Executes the SNS connection task
+	 * @param onComplete Callback to execute after task completion
 	 */
-	private executeSnsTask(): void {
+	private executeSnsTask(onComplete?: () => void): void {
 		const snsTask = this.taskManager.getTask("sns");
 		if (snsTask) {
 			try {
-				const result = this.taskManager.executeTask(snsTask);
+				const result = this.taskManager.executeTask(snsTask, onComplete);
 				if (!result.success) {
 					console.warn(`SNS task execution failed: ${result.message}`);
+					// Call completion callback even on failure to unblock interactions
+					if (onComplete) onComplete();
 				}
 			} catch (error) {
 				console.error("SNS task execution error:", error);
+				// Call completion callback even on error to unblock interactions
+				if (onComplete) onComplete();
 			}
+		} else {
+			// Call completion callback even when task not found
+			if (onComplete) onComplete();
 		}
 	}
 
@@ -1215,9 +1401,21 @@ export class HomeE extends g.E {
 	 * @param fromProfile Whether this request is from profile screen (true) or other locations (false)
 	 */
 	private handleShoppingConnectionRequest(fromProfile: boolean = false): void {
+		// Block user interactions during shopping task execution
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("shoppingTaskExecution", "Executing shopping task");
+		}
+
+		const deferCallback = (): void => {
+			// Unblock user interactions after task execution completes
+			if (this.unblockUserInteraction) {
+				this.unblockUserInteraction("shoppingTaskExecution");
+			}
+		};
+
 		if (fromProfile) {
 			// From profile screen - execute task without screen transition to shop
-			this.executeShoppingTaskFromProfile();
+			this.executeShoppingTaskFromProfile(deferCallback);
 		} else {
 			// From other locations - execute task and may transition to shop
 			if (this.isShopVisible) {
@@ -1226,47 +1424,59 @@ export class HomeE extends g.E {
 				// Wait for shop-to-home animation to complete before executing shopping task
 				// This prevents layout issues caused by modal interference during animation
 				this.scene.setTimeout(() => {
-					this.executeShoppingTask();
+					this.executeShoppingTask(deferCallback);
 				}, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION + 50); // Small buffer for animation completion
 			} else {
 				// If not in shop, execute immediately
-				this.executeShoppingTask();
+				this.executeShoppingTask(deferCallback);
 			}
 		}
 	}
 
 	/**
 	 * Executes the shopping connection task
+	 * @param onComplete Callback to execute after task completion
 	 */
-	private executeShoppingTask(): void {
+	private executeShoppingTask(onComplete?: () => void): void {
 		const shoppingTask = this.taskManager.getTask("shopping");
 		if (shoppingTask) {
 			try {
-				const result = this.taskManager.executeTask(shoppingTask);
+				const result = this.taskManager.executeTask(shoppingTask, onComplete);
 				if (!result.success) {
 					console.warn(`Shopping task execution failed: ${result.message}`);
+					// Call completion callback even on failure to unblock interactions
+					if (onComplete) onComplete();
 				}
 			} catch (error) {
 				console.error("Shopping task execution error:", error);
+				// Call completion callback even on error to unblock interactions
+				if (onComplete) onComplete();
 			}
+		} else {
+			// Call completion callback even when task not found
+			if (onComplete) onComplete();
 		}
 	}
 
 	/**
 	 * Executes the shopping connection task from profile screen (without shop app reveal)
+	 * @param onComplete Callback to execute after task completion
 	 */
-	private executeShoppingTaskFromProfile(): void {
+	private executeShoppingTaskFromProfile(onComplete?: () => void): void {
 		const shoppingTask = this.taskManager.getTask("shopping");
 		if (shoppingTask && !shoppingTask.completed) {
 			// Show shopping connection modal first
-			this.showShoppingConnectionModal(shoppingTask);
+			this.showShoppingConnectionModal(shoppingTask, onComplete);
+		} else {
+			// Call completion callback if task is already completed or not found
+			if (onComplete) onComplete();
 		}
 	}
 
 	/**
 	 * Shows shopping connection modal and handles task completion
 	 */
-	private showShoppingConnectionModal(shoppingTask: TaskData): void {
+	private showShoppingConnectionModal(shoppingTask: TaskData, onComplete?: () => void): void {
 		// Close any existing modal first
 		if (this.currentModal) {
 			this.currentModal.destroy();
@@ -1297,6 +1507,8 @@ export class HomeE extends g.E {
 			onComplete: () => {
 				// Complete task when OK is pressed
 				this.completeShoppingTaskFromProfile(shoppingTask);
+				// Call completion callback
+				if (onComplete) onComplete();
 			}
 		});
 

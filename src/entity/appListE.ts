@@ -99,7 +99,7 @@ export class AppListE extends g.E {
 	 * Reveals the shop app with animation
 	 * @param autoOpen Whether to automatically open shop after reveal (default: true)
 	 */
-	revealShopApp(autoOpen: boolean = true): void {
+	revealShopApp(autoOpen: boolean = true, onComplete?: () => void): void {
 		if (this.shopAppVisible) return;
 
 		// Update app visibility state
@@ -134,8 +134,12 @@ export class AppListE extends g.E {
 			timeline.create(this)
 				.wait(ANIMATION_CONFIG.SHOP_FADE_IN_DURATION)
 				.call(() => {
-					this.highlightShopApp();
+					this.highlightShopApp(onComplete);
 				});
+		} else {
+			if (onComplete) {
+				onComplete();
+			}
 		}
 
 		// Notify that shop app has been revealed
@@ -147,7 +151,7 @@ export class AppListE extends g.E {
 	/**
 	 * Highlights the shop app with a special effect and automatically opens shop
 	 */
-	highlightShopApp(): void {
+	highlightShopApp(onComplete?: () => void): void {
 		if (!this.shopAppVisible) return;
 
 		// Create highlighting animation with scale and opacity pulsing
@@ -168,6 +172,11 @@ export class AppListE extends g.E {
 					opacity: 1
 				}, ANIMATION_CONFIG.SHOP_HIGHLIGHT_DURATION / 2)
 				.call(() => {
+					// NOTE: Lock of taskExecution shopping is delete here. Soon after this,
+					// new lock of shopTransition will be created in onShopClick handler.
+					if (onComplete) {
+						onComplete();
+					}
 					// Automatically trigger shop click after highlighting animation ends
 					if (this.onShopClick) {
 						this.onShopClick();

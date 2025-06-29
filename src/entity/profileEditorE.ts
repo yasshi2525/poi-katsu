@@ -45,8 +45,8 @@ export class ProfileEditorE extends g.E {
 	private readonly onSnsConnectionRequest?: () => void;
 	private readonly onShoppingConnectionRequest?: () => void;
 	private avatarSelection?: RadioButtonGroupE;
-	private selectedAvatarId?: string;
 	private nameButtonText?: g.Label;
+	private submitButton?: LabelButtonE<string>;
 
 	/**
 	 * Creates a new ProfileEditor instance
@@ -70,6 +70,16 @@ export class ProfileEditorE extends g.E {
 
 		// Broadcast current profile on initialization if in multi mode
 		this.broadcastProfile();
+	}
+
+	/**
+	 * Reactivates the submit button for reuse
+	 * Call this method before showing the profile editor again
+	 */
+	reactivateSubmitButton(): void {
+		if (this.submitButton) {
+			this.submitButton.reactivate();
+		}
 	}
 
 	/**
@@ -272,8 +282,7 @@ export class ProfileEditorE extends g.E {
 			buttonWidth: 216,
 			buttonHeight: 80,
 			spacing: 16,
-			onSelectionChange: (selectedId: string, selectedValue: string) => {
-				this.selectedAvatarId = selectedId;
+			onSelectionChange: (_selectedId: string, selectedValue: string) => {
 				// Update gameVars directly when avatar is selected
 				this.gameContext.currentPlayer.profile.avatar = selectedValue;
 
@@ -393,7 +402,7 @@ export class ProfileEditorE extends g.E {
 	 * Creates the submit button
 	 */
 	private createSubmitButton(): void {
-		const submitButton = new LabelButtonE({
+		this.submitButton = new LabelButtonE({
 			scene: this.scene,
 			multi: this.gameContext.gameMode.mode === "multi",
 			name: "submitProfileButton",
@@ -406,7 +415,7 @@ export class ProfileEditorE extends g.E {
 			text: "完了",
 			onComplete: () => this.handleSubmit(),
 		});
-		this.append(submitButton);
+		this.append(this.submitButton);
 	}
 
 	/**

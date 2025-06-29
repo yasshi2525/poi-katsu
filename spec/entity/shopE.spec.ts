@@ -527,4 +527,79 @@ describe("ShopE", () => {
 			mockDynamicPrice.mockRestore();
 		});
 	});
+
+	describe("External Purchase Notification", () => {
+		it("should update button state when notified of external purchase", () => {
+			const testItem = createItemData({
+				id: "external_test_item",
+				name: "外部購入テストアイテム",
+				emoji: "📦",
+				category: "novel",
+				purchasePrice: 100,
+				individualPrice: 120,
+			});
+			itemManager.addItemDataForTesting(testItem);
+
+			// Create shop instance
+			const shop = new ShopE({
+				scene: scene,
+				x: 0,
+				y: 0,
+				width: scene.game.width,
+				height: scene.game.height,
+				itemManager: itemManager,
+				marketManager: marketManager,
+				onCheckPoints: mockCheckPoints,
+				onDeductPoints: mockDeductPoints,
+				onItemPurchased: mockItemPurchased,
+				onGetRemainingTime: mockGetRemainingTime,
+				onIsTimelineRevealed: mockIsTimelineRevealed,
+				onShareProduct: mockShareProduct,
+				onSnsConnectionRequest: mockSnsConnectionRequest,
+			});
+
+			// Find the purchase button before external purchase
+			const purchaseButton = (shop as any).purchaseButtons.get(testItem.id);
+			expect(purchaseButton).toBeDefined();
+			expect(purchaseButton.text).not.toBe("所持済");
+			expect(purchaseButton.touchable).toBe(true);
+
+			// Simulate external purchase (e.g., from timeline)
+			shop.updateButtonStatesAfterPurchase(testItem.id);
+
+			// Verify button state was updated
+			expect(purchaseButton.text).toBe("所持済");
+			expect(purchaseButton.touchable).toBe(false);
+
+			// Cleanup
+			shop.destroy();
+		});
+
+		it("should handle external purchase notification for non-existent item gracefully", () => {
+			const shop = new ShopE({
+				scene: scene,
+				x: 0,
+				y: 0,
+				width: scene.game.width,
+				height: scene.game.height,
+				itemManager: itemManager,
+				marketManager: marketManager,
+				onCheckPoints: mockCheckPoints,
+				onDeductPoints: mockDeductPoints,
+				onItemPurchased: mockItemPurchased,
+				onGetRemainingTime: mockGetRemainingTime,
+				onIsTimelineRevealed: mockIsTimelineRevealed,
+				onShareProduct: mockShareProduct,
+				onSnsConnectionRequest: mockSnsConnectionRequest,
+			});
+
+			// Should not throw error when called with non-existent item ID
+			expect(() => {
+				shop.updateButtonStatesAfterPurchase("non_existent_item");
+			}).not.toThrow();
+
+			// Cleanup
+			shop.destroy();
+		});
+	});
 });

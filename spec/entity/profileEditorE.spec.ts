@@ -549,6 +549,40 @@ describe("ProfileEditorE", () => {
 		});
 	});
 
+	describe("button reactivation", () => {
+		it("should reactivate submit button when requested", () => {
+			// Find the submit button
+			const submitButton = findButton("submitProfileButton");
+			expect(submitButton).toBeDefined();
+
+			// Mock the reactivate method
+			const reactivateSpy = jest.spyOn(submitButton!, "reactivate");
+
+			// Call reactivateSubmitButton
+			profileEditor.reactivateSubmitButton();
+
+			// Verify reactivate was called
+			expect(reactivateSpy).toHaveBeenCalledTimes(1);
+
+			// Cleanup
+			reactivateSpy.mockRestore();
+		});
+
+		it("should handle reactivate call when submit button is not available", () => {
+			// Simply test with existing profileEditor by clearing its submitButton
+			const originalSubmitButton = (profileEditor as any).submitButton;
+			(profileEditor as any).submitButton = undefined;
+
+			// Should not throw error when calling reactivate
+			expect(() => {
+				profileEditor.reactivateSubmitButton();
+			}).not.toThrow();
+
+			// Restore original submit button
+			(profileEditor as any).submitButton = originalSubmitButton;
+		});
+	});
+
 	// Helper functions
 	function findButton(buttonName: string): LabelButtonE<any> | null {
 		const findButtonRecursive = (entity: g.E): LabelButtonE<any> | null => {

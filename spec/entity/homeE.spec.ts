@@ -504,8 +504,10 @@ describe("HomeE", () => {
 			// Wait for return animation and task completion
 			await gameContext.advance(1500);
 
-			// Verify ProfileEditorE is gone
-			expect(findCurrentProfileEditor()).toBeNull();
+			// Verify ProfileEditorE is no longer visible (but instance is preserved)
+			const profileEditorAfterReturn = findCurrentProfileEditor();
+			expect(profileEditorAfterReturn).not.toBeNull(); // Instance should be preserved
+			expect(profileEditorAfterReturn!.x).toBe(scene.game.width); // Should be positioned off-screen
 
 			// Verify profile task is completed (button should be gone)
 			expect(findTaskExecuteButton("profile")).toBeNull();

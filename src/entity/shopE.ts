@@ -162,6 +162,20 @@ export class ShopE extends g.E {
 	}
 
 	/**
+	 * Updates button states after a purchase without recreating the entire display
+	 * @param purchasedItemId The ID of the item that was purchased
+	 */
+	updateButtonStatesAfterPurchase(purchasedItemId: string): void {
+		// Update the purchased item's button to show "所持済" and disable it
+		const purchaseButton = this.purchaseButtons.get(purchasedItemId);
+		if (purchaseButton) {
+			purchaseButton.setText("所持済");
+			purchaseButton.setBackgroundColor(SHOP_CONFIG.OWNED_BUTTON_COLOR);
+			purchaseButton.touchable = false;
+		}
+	}
+
+	/**
 	 * Cleanup method to clear intervals and resources
 	 */
 	override destroy(): void {
@@ -946,21 +960,6 @@ export class ShopE extends g.E {
 			}
 		});
 	}
-
-	/**
-	 * Updates button states after a purchase without recreating the entire display
-	 * @param purchasedItemId The ID of the item that was purchased
-	 */
-	private updateButtonStatesAfterPurchase(purchasedItemId: string): void {
-		// Update the purchased item's button to show "所持済" and disable it
-		const purchaseButton = this.purchaseButtons.get(purchasedItemId);
-		if (purchaseButton) {
-			purchaseButton.setText("所持済");
-			purchaseButton.setBackgroundColor(SHOP_CONFIG.OWNED_BUTTON_COLOR);
-			purchaseButton.touchable = false;
-		}
-	}
-
 
 	/**
 	 * Updates all price labels, purchase button args, and share button args with current dynamic prices

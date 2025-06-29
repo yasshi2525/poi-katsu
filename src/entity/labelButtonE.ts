@@ -112,6 +112,13 @@ export class LabelButtonE<T> extends ButtonE<T, LabelButtonEParameterObject<T>> 
 	}
 
 	/**
+	 * Gets the current text displayed on the button
+	 */
+	get text(): string {
+		return this.label.text;
+	}
+
+	/**
 	 * Changes the text displayed on the button
 	 * Updates the label and repositions it to center
 	 * @param text New text to display
