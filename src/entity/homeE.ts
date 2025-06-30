@@ -2,10 +2,16 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AffiliateBroadcastMessage } from "../data/affiliateMessages";
 import { GameContext } from "../data/gameContext";
 import { ItemData } from "../data/itemData";
+import {
+	createAffiliateRewardNotification,
+	createTaskCompletedNotification
+} from "../data/notificationData";
 import { createSharedPost, SharedPostData } from "../data/sharedPostData";
 import { TaskData } from "../data/taskData";
+import { InterruptionHandler } from "../manager/interactionBlockerManager";
 import { ItemManager } from "../manager/itemManager";
 import { MarketManager } from "../manager/marketManager";
+import { NotificationManager } from "../manager/notificationManager";
 import { PointManager, POINT_CONSTANTS } from "../manager/pointManager";
 import { TaskManager, TaskExecutionContext } from "../manager/taskManager";
 import { AdBannerE, BannerData, BannerContext } from "./adBannerE";
@@ -57,10 +63,12 @@ export interface HomeParameterObject extends g.EParameterObject {
 	marketManager: MarketManager;
 	/** Point manager instance for centralized point management */
 	pointManager: PointManager;
+	/** Notification manager instance for centralized notification management */
+	notificationManager: NotificationManager;
 	/** Function to update current player score in MainScene */
 	updateCurrentPlayerScore: (score: number) => void;
 	/** Function to block user interaction via MainScene */
-	blockUserInteraction?: (blockerId: string, reason?: string) => void;
+	blockUserInteraction?: (blockerId: string, reason?: string, interruptionHandler?: InterruptionHandler | null) => void;
 	/** Function to unblock user interaction via MainScene */
 	unblockUserInteraction?: (blockerId: string) => void;
 }
@@ -91,10 +99,11 @@ export class HomeE extends g.E {
 	private itemManager!: ItemManager;
 	private gameContext: GameContext;
 	private marketManager!: MarketManager;
+	private notificationManager!: NotificationManager;
 
 	// MainScene function callbacks
 	private updateCurrentPlayerScore!: (score: number) => void;
-	private blockUserInteraction?: (blockerId: string, reason?: string) => void;
+	private blockUserInteraction?: (blockerId: string, reason?: string, interruptionHandler?: InterruptionHandler | null) => void;
 	private unblockUserInteraction?: (blockerId: string) => void;
 
 	// Screen state
@@ -121,7 +130,7 @@ export class HomeE extends g.E {
 			id: "welcome_ad",
 			priority: 1,
 			enabled: true,
-			title: "[PR] ポイ活ウォーズへようこそ！",
+			title: "[広告] ポイ活ウォーズへようこそ！",
 			subtitle: "広告をタップしてさらにポイントゲット",
 			saleTag: `タップで${POINT_CONSTANTS.AD_BANNER_CLICK_REWARD}pt！`,
 			backgroundColor: "#c2185b",
@@ -136,7 +145,7 @@ export class HomeE extends g.E {
 			id: "shopping_recommend",
 			priority: 2,
 			enabled: true,
-			title: "[PR] 通販でもっとポイント！",
+			title: "[広告] 通販でもっとポイント！",
 			subtitle: "商品購入でポイント大量獲得",
 			saleTag: "お得！",
 			backgroundColor: "#c2185b",
@@ -152,7 +161,7 @@ export class HomeE extends g.E {
 			id: "sale_notification",
 			priority: 3,
 			enabled: true,
-			title: "[PR] セール開催中！",
+			title: "[広告] セール開催中！",
 			subtitle: "今すぐ通販をチェック",
 			saleTag: "限定！",
 			backgroundColor: "#c2185b",
@@ -168,7 +177,7 @@ export class HomeE extends g.E {
 			id: "sns_recommend",
 			priority: 4,
 			enabled: true,
-			title: "[PR] SNS連携でもっとお得！",
+			title: "[広告] SNS連携でもっとお得！",
 			subtitle: "商品シェアでポイント還元",
 			saleTag: "シェア！",
 			backgroundColor: "#c2185b",
@@ -196,6 +205,7 @@ export class HomeE extends g.E {
 		this.gameContext = options.gameContext;
 		this.marketManager = options.marketManager;
 		this.pointManager = options.pointManager;
+		this.notificationManager = options.notificationManager;
 		this.updateCurrentPlayerScore = options.updateCurrentPlayerScore;
 		this.blockUserInteraction = options.blockUserInteraction;
 		this.unblockUserInteraction = options.unblockUserInteraction;
@@ -319,6 +329,10 @@ export class HomeE extends g.E {
 	 * Returns to home screen if currently viewing other apps
 	 */
 	returnToHomeIfNeeded(): void {
+		if (this.isProfileEditorVisible) {
+			this.switchBackFromProfileEditor();
+		}
+
 		// If viewing shop, switch back to home
 		if (this.isShopVisible) {
 			this.switchBackFromShop();
@@ -328,11 +342,6 @@ export class HomeE extends g.E {
 		if (this.isSettlementVisible) {
 			this.switchBackFromSettlement();
 		}
-
-		// Ensure all home sections are visible and positioned correctly
-		this.getHomeSections().forEach(section => {
-			section.x = section.x - (section.x % this.screenWidth); // Reset to home position
-		});
 	}
 
 	/**
@@ -346,10 +355,6 @@ export class HomeE extends g.E {
 
 		// The settlement app is made non-touchable during auto-reveal to avoid unintentional behavior
 		// The highlighting effect will automatically open the settlement app
-
-		// hide all other app windows
-		this.shop?.hide();
-		this.profileEditor?.hide();
 	}
 
 	/**
@@ -358,6 +363,11 @@ export class HomeE extends g.E {
 	forceCloseAllModals(): void {
 		// Close any current modal
 		this.closeModal();
+
+		// Close modals in timeline
+		if (this.timeline) {
+			this.timeline.forceCloseAllModals();
+		}
 
 		// Close modals in shop if visible
 		if (this.shop && this.isShopVisible) {
@@ -403,14 +413,8 @@ export class HomeE extends g.E {
 			onTaskButtonReactivate: (taskId: string) => {
 				return this.reactivateTaskButton(taskId);
 			},
-			onAchievementShow: (task: TaskData, notificationType?: string) => {
-				if (notificationType === "sns") {
-					this.showSnsRewardNotification(task);
-				} else if (notificationType === "shopping") {
-					this.showShoppingRewardNotification(task);
-				} else {
-					this.showAchievementEffect(task);
-				}
+			onAchievementShow: (task: TaskData) => {
+				this.showAchievementEffect(task);
 			},
 			onTaskComplete: (taskId: string) => {
 				this.taskList.completeTaskExternal(taskId);
@@ -436,7 +440,13 @@ export class HomeE extends g.E {
 				if (task) {
 					// Block user interactions during banner task execution
 					if (this.blockUserInteraction) {
-						this.blockUserInteraction(`bannerTaskExecution_${taskId}`, `Executing banner task: ${taskId}`);
+						this.blockUserInteraction(`bannerTaskExecution_${taskId}`, `Executing banner task: ${taskId}`, () => {
+							// 中断処理: 開いているモーダルを強制閉じる
+							if (this.currentModal) {
+								this.currentModal.destroy();
+								this.currentModal = undefined;
+							}
+						});
 					}
 
 					const deferCallback = (): void => {
@@ -546,7 +556,13 @@ export class HomeE extends g.E {
 	private onTaskExecute(taskData: TaskData): void {
 		// Block user interactions during task execution
 		if (this.blockUserInteraction) {
-			this.blockUserInteraction(`taskExecution_${taskData.id}`, `Executing task: ${taskData.id}`);
+			this.blockUserInteraction(`taskExecution_${taskData.id}`, `Executing task: ${taskData.id}`, () => {
+				// 中断処理: 開いているモーダルを強制閉じる
+				if (this.currentModal) {
+					this.currentModal.destroy();
+					this.currentModal = undefined;
+				}
+			});
 		}
 
 		const deferCallback = (): void => {
@@ -593,6 +609,7 @@ export class HomeE extends g.E {
 			this.profileEditor = new ProfileEditorE({
 				scene: this.scene,
 				gameContext: this.gameContext,
+				notificationManager: this.notificationManager,
 				width: this.screenWidth,
 				height: this.screenHeight,
 				x: this.screenWidth, // Start off-screen to the right
@@ -706,50 +723,8 @@ export class HomeE extends g.E {
 	 * @param task The completed task
 	 */
 	private showAchievementEffect(task: TaskData): void {
-		// Create achievement notification that slides in from the right
-		const achievementNotification = new g.E({
-			scene: this.scene,
-			x: this.screenWidth, // Start off-screen to the right
-			y: 100,
-		});
-
-		// Background for notification
-		const notificationBg = new g.FilledRect({
-			scene: this.scene,
-			width: 300,
-			height: 60,
-			x: 0,
-			y: 0,
-			cssColor: "#27ae60",
-		});
-		achievementNotification.append(notificationBg);
-
-		// Achievement text
-		const achievementText = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: "white",
-			}),
-			text: `${task.title} 完了！ +${task.rewardPoints}pt`,
-			x: 10,
-			y: 20,
-		});
-		achievementNotification.append(achievementText);
-
-		this.append(achievementNotification);
-
-		// Animate notification: slide in, wait, slide out
-		const timeline = new Timeline(this.scene);
-		timeline.create(achievementNotification)
-			.to({ x: this.screenWidth - ANIMATION_CONFIG.ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION)
-			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.call(() => {
-				achievementNotification.destroy();
-			});
+		const notification = createTaskCompletedNotification(task.title, `+${task.rewardPoints}pt`);
+		this.notificationManager.showNotification(notification);
 	}
 
 
@@ -786,59 +761,47 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Shows SNS reward notification
-	 * @param taskData The completed SNS task
+	 * Switches back from ProfileEditorE to HomeE with swipe animation
+	 * This method supports both user-initiated and forced transitions (during settlement)
 	 */
-	private showSnsRewardNotification(taskData: TaskData): void {
-		// Create achievement notification that slides in from the right
-		const achievementNotification = new g.E({
-			scene: this.scene,
-			x: this.screenWidth, // Start off-screen to the right
-			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET, // Position below existing notifications
-		});
+	private switchBackFromProfileEditor(): void {
+		if (!this.isProfileEditorVisible || !this.profileEditor) return;
 
-		// Background for notification
-		const notificationBg = new g.FilledRect({
-			scene: this.scene,
-			width: 350,
-			height: 80,
-			x: 0,
-			y: 0,
-			cssColor: "#3498db", // Blue color for SNS
-		});
-		achievementNotification.append(notificationBg);
+		// Block user interactions during transition
+		if (this.blockUserInteraction) {
+			this.blockUserInteraction("profileBackTransition", "Transitioning back from profile editor");
+		}
 
-		// Achievement text
-		const achievementText = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-			}),
-			text: `SNS連携完了！ +${taskData.rewardPoints}pt\nタイムライン機能が利用可能に！`,
-			x: 10,
-			y: 15,
-		});
-		achievementNotification.append(achievementText);
+		// Create overlay to prevent user interactions during animation
+		this.createSwipeOverlay();
 
-		this.append(achievementNotification);
-
-		// Animate notification: slide in, wait, slide out
+		// Create swipe animation: ProfileEditor slides right, HomeE slides in from left
 		const timeline = new Timeline(this.scene);
-		timeline.create(achievementNotification)
-			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for SNS
-			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
+
+		// Animate ProfileEditor sliding out to the right
+		timeline.create(this.profileEditor)
+			.to({ x: this.screenWidth }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION)
 			.call(() => {
-				achievementNotification.destroy();
+				// Update header section with current profile data from gameVars
+				this.updateHeaderWithCurrentProfile();
+				// Keep profile editor instance but mark as not visible
+				this.isProfileEditorVisible = false;
+				// Complete the profile task using TaskManager
+				this.taskManager.completeProfileTask();
+				// Remove overlay when animation completes
+				this.removeSwipeOverlay();
+				// Unblock user interactions after profile transition completes
+				if (this.unblockUserInteraction) {
+					this.unblockUserInteraction("profileBackTransition");
+				}
 			});
+
+		// Animate HomeE sections sliding back in from the left
+		this.getHomeSections().forEach(section => {
+			timeline.create(section)
+				.to({ x: section.x + ANIMATION_CONFIG.SCREEN_SWIPE_DISTANCE }, ANIMATION_CONFIG.SCREEN_SWIPE_DURATION);
+		});
 	}
-
-
-
-
 
 	/**
 	 * Switches from HomeE to ShopE with swipe animation
@@ -868,6 +831,7 @@ export class HomeE extends g.E {
 				y: 0,
 				itemManager: this.itemManager,
 				marketManager: this.marketManager,
+				notificationManager: this.notificationManager,
 				onCheckPoints: () => this.getScore(),
 				onDeductPoints: (amount: number) => this.addScore(-amount, "shopping", "Item purchase"),
 				onItemPurchased: (item: ItemData) => this.onItemPurchased(item),
@@ -876,6 +840,7 @@ export class HomeE extends g.E {
 				onIsTimelineRevealed: () => this.isTimelineVisible,
 				onShareProduct: (item: ItemData, sharedPrice: number) => this.handleProductShare(item, sharedPrice),
 				onSnsConnectionRequest: () => this.handleSnsConnectionRequest(false), // false = from shop
+				onGetLowestPricePost: (itemId: string) => this.getLowestPricePost(itemId),
 				onPriceUpdate: () => {
 					// Re-enable sale notification ad when product prices are updated
 					this.adBanner.setBannerEnabled("sale_notification", true);
@@ -960,12 +925,20 @@ export class HomeE extends g.E {
 			return;
 		}
 
+		if (this.profileEditor) {
+			this.profileEditor.hide();
+		}
+		if (this.shop) {
+			this.shop.hide();
+		}
+
 		// Create or reuse settlement positioned off-screen to the right
 		if (!this.settlement) {
 			this.settlement = new SettlementE({
 				scene: this.scene,
 				gameContext: this.gameContext,
 				itemManager: this.itemManager,
+				notificationManager: this.notificationManager,
 				pointManager: this.pointManager
 			});
 			this.settlement.x = this.screenWidth; // Start off-screen to the right
@@ -1070,57 +1043,6 @@ export class HomeE extends g.E {
 	}
 
 	/**
-	 * Shows shopping reward notification
-	 * @param taskData The completed shopping task
-	 */
-	private showShoppingRewardNotification(taskData: TaskData): void {
-		// Create achievement notification that slides in from the right
-		const achievementNotification = new g.E({
-			scene: this.scene,
-			x: this.screenWidth, // Start off-screen to the right
-			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET + 100, // Position below SNS notifications
-		});
-
-		// Background for notification
-		const notificationBg = new g.FilledRect({
-			scene: this.scene,
-			width: 350,
-			height: 80,
-			x: 0,
-			y: 0,
-			cssColor: "#2980b9", // Blue color for shopping
-		});
-		achievementNotification.append(notificationBg);
-
-		// Achievement text
-		const achievementText = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-			}),
-			text: `通販連携完了！ +${taskData.rewardPoints}pt\n通販アプリが利用可能に！`,
-			x: 10,
-			y: 15,
-		});
-		achievementNotification.append(achievementText);
-
-		this.append(achievementNotification);
-
-		// Animate notification: slide in, wait, slide out
-		const timeline = new Timeline(this.scene);
-		timeline.create(achievementNotification)
-			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for shopping
-			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.call(() => {
-				achievementNotification.destroy();
-			});
-	}
-
-	/**
 	 * Handles item purchase completion
 	 * @param item The purchased item
 	 */
@@ -1158,6 +1080,9 @@ export class HomeE extends g.E {
 		if (task && !task.completed) {
 			// Complete the collection task automatically (not execute)
 			this.taskManager.completeTask(taskId);
+
+			// Refresh task list to ensure collection task is displayed before trying to complete it
+			this.refreshTaskList();
 		}
 	}
 
@@ -1237,6 +1162,7 @@ export class HomeE extends g.E {
 	 */
 	private createAndBroadcastPost(item: ItemData, sharedPrice: number): void {
 		// Get current player name from GameContext
+		const playerAvatar = this.gameContext.currentPlayer.profile.avatar;
 		const playerName = this.gameContext.currentPlayer.profile.name;
 
 		// Create shared post with unique ID including player ID
@@ -1245,6 +1171,7 @@ export class HomeE extends g.E {
 			id: postId,
 			sharerId: this.gameContext.currentPlayer.id,
 			sharerName: playerName,
+			sharerAvatar: playerAvatar,
 			item: item,
 			sharedPrice: sharedPrice,
 			sharedAt: this.getNextTimestamp()
@@ -1288,50 +1215,8 @@ export class HomeE extends g.E {
 	 * @param buyerName Name of the buyer
 	 */
 	private showAffiliateRewardNotification(rewardPoints: number, buyerName: string): void {
-		// Create achievement notification that slides in from the right
-		const achievementNotification = new g.E({
-			scene: this.scene,
-			x: this.screenWidth, // Start off-screen to the right
-			y: ANIMATION_CONFIG.SNS_ACHIEVEMENT_Y_OFFSET + 200, // Position below other notifications
-		});
-
-		// Background for notification
-		const notificationBg = new g.FilledRect({
-			scene: this.scene,
-			width: 350,
-			height: 80,
-			x: 0,
-			y: 0,
-			cssColor: "#e67e22", // Orange color for affiliate
-		});
-		achievementNotification.append(notificationBg);
-
-		// Achievement text
-		const achievementText = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-			}),
-			text: `アフィリエイト報酬獲得！ +${rewardPoints}pt\n${buyerName}さんが商品を購入しました！`,
-			x: 10,
-			y: 15,
-		});
-		achievementNotification.append(achievementText);
-
-		this.append(achievementNotification);
-
-		// Animate notification: slide in, wait, slide out
-		const timeline = new Timeline(this.scene);
-		timeline.create(achievementNotification)
-			.to({ x: this.screenWidth - ANIMATION_CONFIG.SNS_ACHIEVEMENT_POSITION_FROM_RIGHT }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.wait(ANIMATION_CONFIG.ACHIEVEMENT_DISPLAY_DURATION + 500) // Longer display for affiliate
-			.to({ x: this.screenWidth }, ANIMATION_CONFIG.ACHIEVEMENT_SLIDE_DURATION)
-			.call(() => {
-				achievementNotification.destroy();
-			});
+		const notification = createAffiliateRewardNotification(rewardPoints, buyerName);
+		this.notificationManager.showNotification(notification);
 	}
 
 	/**
@@ -1341,7 +1226,13 @@ export class HomeE extends g.E {
 	private handleSnsConnectionRequest(fromProfile: boolean = false): void {
 		// Block user interactions during SNS task execution
 		if (this.blockUserInteraction) {
-			this.blockUserInteraction("snsTaskExecution", "Executing SNS task");
+			this.blockUserInteraction("snsTaskExecution", "Executing SNS task", () => {
+				// 中断処理: 開いているモーダルを強制閉じる
+				if (this.currentModal) {
+					this.currentModal.destroy();
+					this.currentModal = undefined;
+				}
+			});
 		}
 
 		const deferCallback = (): void => {
@@ -1403,7 +1294,13 @@ export class HomeE extends g.E {
 	private handleShoppingConnectionRequest(fromProfile: boolean = false): void {
 		// Block user interactions during shopping task execution
 		if (this.blockUserInteraction) {
-			this.blockUserInteraction("shoppingTaskExecution", "Executing shopping task");
+			this.blockUserInteraction("shoppingTaskExecution", "Executing shopping task", () => {
+				// 中断処理: 開いているモーダルを強制閉じる
+				if (this.currentModal) {
+					this.currentModal.destroy();
+					this.currentModal = undefined;
+				}
+			});
 		}
 
 		const deferCallback = (): void => {
@@ -1520,11 +1417,8 @@ export class HomeE extends g.E {
 	 * Completes shopping task from profile without automatic shop transition
 	 */
 	private completeShoppingTaskFromProfile(shoppingTask: TaskData): void {
-		// Manually complete the task
-		shoppingTask.completed = true;
-
-		// Add points for task completion
-		this.addScore(shoppingTask.rewardPoints, "task", `Task completed: ${shoppingTask.title}`);
+		// Complete the task through TaskManager to trigger proper events
+		this.taskManager.completeTask(shoppingTask.id);
 
 		// Ensure shop app is available by revealing it without auto-open
 		this.appList.revealShopApp(false); // false = don't auto-open
@@ -1541,6 +1435,20 @@ export class HomeE extends g.E {
 			this.currentModal.destroy();
 			this.currentModal = undefined;
 		}
+	}
+
+	/**
+	 * Gets the lowest priced post for a specific item from timeline
+	 * @param itemId Item ID to search for
+	 * @returns Object with shared price, or null if no posts exist
+	 */
+	private getLowestPricePost(itemId: string): { sharedPrice: number } | null {
+		if (!this.timeline) {
+			return null;
+		}
+
+		const lowestPost = this.timeline.getLowestPricePost(itemId);
+		return lowestPost ? { sharedPrice: lowestPost.sharedPrice } : null;
 	}
 
 	/**

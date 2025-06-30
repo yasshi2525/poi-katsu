@@ -469,7 +469,7 @@ describe("ShopE", () => {
 			updatePriceLabelsSpy.mockRestore();
 		});
 
-		it("should update purchase button args when prices change", () => {
+		it("should update purchase button args when prices change", async () => {
 			// Get available items for testing
 			const availableItems = itemManager.getAvailableItems();
 			const testItem = availableItems[0];
@@ -490,6 +490,11 @@ describe("ShopE", () => {
 			// Trigger price update via the listener
 			(shop as any).updateAllPriceLabels();
 
+			// Wait for animation to complete (250ms fade out + 250ms fade in)
+			await gameContext.step(); // Advance one frame
+			await gameContext.advance(250); // Wait for fade out
+			await gameContext.advance(250); // Wait for fade in
+
 			// Verify that the button args were updated with the new price
 			const updatedArgs = purchaseButton.msgArgs;
 			expect(updatedArgs).toBe(`${testItem.id}_${newPrice}`);
@@ -498,7 +503,7 @@ describe("ShopE", () => {
 			mockDynamicPrice.mockRestore();
 		});
 
-		it("should update share button args when prices change", () => {
+		it("should update share button args when prices change", async () => {
 			// Get available items for testing
 			const availableItems = itemManager.getAvailableItems();
 			const testItem = availableItems[0];
@@ -518,6 +523,11 @@ describe("ShopE", () => {
 
 			// Trigger price update via the listener
 			(shop as any).updateAllPriceLabels();
+
+			// Wait for animation to complete (250ms fade out + 250ms fade in)
+			await gameContext.step(); // Advance one frame
+			await gameContext.advance(250); // Wait for fade out
+			await gameContext.advance(250); // Wait for fade in
 
 			// Verify that the share button args were updated with the new price
 			const updatedArgs = shareButton.msgArgs;

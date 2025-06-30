@@ -1,4 +1,5 @@
 
+import type { PointTransaction } from "../manager/pointManager";
 import { NotificationData } from "./notificationData";
 import { PlayerData, PlayerProfile, createPlayerData } from "./playerData";
 
@@ -65,6 +66,7 @@ export class GameContext {
 	private _notifications: NotificationData[];
 	private _eventListeners: Map<string, Array<(data: any) => void>>;
 	private _achievedTaskIds: Set<string>;
+	private _playerTransactions: Map<string, PointTransaction[]>;
 
 	/**
 	 * Creates a game context for testing with default values
@@ -113,6 +115,7 @@ export class GameContext {
 		this._notifications = [];
 		this._eventListeners = new Map();
 		this._achievedTaskIds = new Set();
+		this._playerTransactions = new Map();
 
 		// Add current player to all players map
 		this._allPlayers.set(this._currentPlayer.id, this._currentPlayer);
@@ -342,6 +345,41 @@ export class GameContext {
 	 */
 	hasAchievedTask(taskId: string): boolean {
 		return this._achievedTaskIds.has(taskId);
+	}
+
+	/**
+	 * Stores transaction details for a player
+	 * @param playerId Player ID
+	 * @param transactions Array of transactions
+	 * @param totalScore Total score to validate against
+	 */
+	storePlayerTransactions(playerId: string, transactions: PointTransaction[], totalScore: number): void {
+		// Validate transaction total against reported score
+		const transactionTotal = transactions.reduce((sum, t) => sum + t.amount, 0);
+		if (transactionTotal !== totalScore) {
+			// Ignore invalid data
+			return;
+		}
+
+		this._playerTransactions.set(playerId, transactions);
+		this.emit("playerTransactionsUpdated", { playerId, transactions });
+	}
+
+	/**
+	 * Gets transaction details for a player
+	 * @param playerId Player ID
+	 * @returns Array of transactions or null if not available
+	 */
+	getPlayerTransactions(playerId: string): PointTransaction[] | null {
+		return this._playerTransactions.get(playerId) || null;
+	}
+
+	/**
+	 * Gets all players who have shared transaction details
+	 * @returns Array of player IDs with available transaction data
+	 */
+	getPlayersWithTransactionData(): string[] {
+		return Array.from(this._playerTransactions.keys());
 	}
 
 	/**

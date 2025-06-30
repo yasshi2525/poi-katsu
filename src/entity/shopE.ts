@@ -1,7 +1,10 @@
+import { Timeline } from "@akashic-extension/akashic-timeline";
 import { AFFILIATE_CONFIG } from "../config/affiliateConfig";
 import { ItemData } from "../data/itemData";
+import { createMarketReactionNotification, MarketReactionType } from "../data/notificationData";
 import { ItemManager } from "../manager/itemManager";
 import { MarketManager } from "../manager/marketManager";
+import { NotificationManager } from "../manager/notificationManager";
 import { POINT_CONSTANTS } from "../manager/pointManager";
 import { LabelButtonE } from "./labelButtonE";
 import { ModalE } from "./modalE";
@@ -38,6 +41,11 @@ const SHOP_CONFIG = {
 
 	// Point back system
 	POINT_BACK_RATE: POINT_CONSTANTS.SHOPPING_POINT_BACK_RATE, // 10% point back rate
+
+	// Price update animation
+	PRICE_FADE_DURATION: 250,
+	PRICE_FADE_OPACITY: 0.3,
+	PRICE_UPDATE_INTERVAL: 3000, // 3 seconds interval for price updates
 } as const;
 
 /**
@@ -65,6 +73,8 @@ export interface ShopParameterObject extends g.EParameterObject {
 	itemManager: ItemManager;
 	/** Market manager instance */
 	marketManager: MarketManager;
+	/** Notification manager instance */
+	notificationManager: NotificationManager;
 	/** Callback to check if player has enough points */
 	onCheckPoints: () => number;
 	/** Callback to deduct points for purchase */
@@ -83,6 +93,8 @@ export interface ShopParameterObject extends g.EParameterObject {
 	onSnsConnectionRequest?: () => void;
 	/** Callback when product prices are updated */
 	onPriceUpdate?: () => void;
+	/** Callback to get lowest priced post for an item */
+	onGetLowestPricePost?: (itemId: string) => { sharedPrice: number } | null;
 }
 
 /**
@@ -94,6 +106,7 @@ export class ShopE extends g.E {
 	private readonly layout: LayoutConfig;
 	private readonly itemManager: ItemManager;
 	private readonly marketManager: MarketManager;
+	private readonly notificationManager: NotificationManager;
 	private readonly onCheckPoints: () => number;
 	private readonly onDeductPoints: (amount: number) => void;
 	private readonly onItemPurchased: (item: ItemData) => void;
@@ -103,6 +116,7 @@ export class ShopE extends g.E {
 	private readonly onShareProduct?: (item: ItemData, sharedPrice: number) => void;
 	private readonly onSnsConnectionRequest?: () => void;
 	private readonly onPriceUpdate?: () => void;
+	private readonly onGetLowestPricePost?: (itemId: string) => { sharedPrice: number } | null;
 	private currentModal?: ModalE<string>;
 	private purchaseButtons: Map<string, LabelButtonE<string>> = new Map(); // Store button references for reactivation
 	private shareButtons: Map<string, LabelButtonE<string>> = new Map(); // Store share button references
@@ -121,6 +135,7 @@ export class ShopE extends g.E {
 		this.multi = options.multi;
 		this.itemManager = options.itemManager;
 		this.marketManager = options.marketManager;
+		this.notificationManager = options.notificationManager;
 		this.onCheckPoints = options.onCheckPoints;
 		this.onDeductPoints = options.onDeductPoints;
 		this.onItemPurchased = options.onItemPurchased;
@@ -130,6 +145,7 @@ export class ShopE extends g.E {
 		this.onShareProduct = options.onShareProduct;
 		this.onSnsConnectionRequest = options.onSnsConnectionRequest;
 		this.onPriceUpdate = options.onPriceUpdate;
+		this.onGetLowestPricePost = options.onGetLowestPricePost;
 		this.layout = this.createLayoutConfig(options.width, options.height);
 		this.createLayout();
 
@@ -654,8 +670,11 @@ export class ShopE extends g.E {
 			this.onShareProduct(item, sharedPrice);
 		}
 
+		// Show market reaction notification
+		this.showMarketReactionNotification(item, sharedPrice);
+
 		// Show confirmation that item was shared
-		this.showPurchaseModal(`${item.name}をシェアしました！\n価格: ${sharedPrice}pt\n\nタイムラインに投稿されました。`, true);
+		this.showShareModal(`${item.name}をシェアしました！\n価格: ${sharedPrice}pt\n\nタイムラインに投稿されました。`, true);
 	}
 
 	/**
@@ -801,6 +820,39 @@ export class ShopE extends g.E {
 			name: "purchaseResultModal",
 			args: "",
 			title: isSuccess ? "購入完了" : "購入失敗",
+			message: message,
+			width: 350,
+			height: 200,
+			onClose: () => this.closeModal(),
+		});
+
+		modal.replaceCloseButton({
+			text: "OK",
+			backgroundColor: isSuccess ? SHOP_CONFIG.SUCCESS_COLOR : SHOP_CONFIG.ERROR_COLOR,
+			textColor: "white",
+			width: SHOP_CONFIG.MODAL_BUTTON_WIDTH,
+			height: SHOP_CONFIG.MODAL_BUTTON_HEIGHT,
+			onComplete: () => this.closeModal()
+		});
+
+		this.currentModal = modal;
+		this.scene.append(modal);
+	}
+
+	/**
+	 * Shows share result modal
+	 * @param message The message to display
+	 * @param isSuccess Whether the share was successful
+	 */
+	private showShareModal(message: string, isSuccess: boolean): void {
+		this.closeModal();
+
+		const modal = new ModalE({
+			scene: this.scene,
+			multi: this.multi,
+			name: "purchaseResultModal",
+			args: "",
+			title: isSuccess ? "シェア完了" : "シェア失敗",
 			message: message,
 			width: 350,
 			height: 200,
@@ -968,37 +1020,77 @@ export class ShopE extends g.E {
 	private updateAllPriceLabels(): void {
 		const availableItems = this.itemManager.getAvailableItems();
 
+		// Collect price labels that need updating with animation
+		const labelsToUpdate: { label: g.Label; newText: string; item: ItemData; currentPrice: number }[] = [];
+
 		availableItems.forEach(item => {
 			const currentPrice = this.getDynamicPrice(item);
-
-			// Update price label
 			const priceLabel = this.priceLabels.get(item.id);
+
 			if (priceLabel) {
 				const newText = `${currentPrice}pt`;
 				if (priceLabel.text !== newText) {
-					priceLabel.text = newText;
-					priceLabel.invalidate(); // Force redraw
-				}
-			}
-
-			// Update purchase button args to match current price
-			const purchaseButton = this.purchaseButtons.get(item.id);
-			if (purchaseButton) {
-				const newArgs = `${item.id}_${currentPrice}`;
-				if (purchaseButton.msgArgs !== newArgs) {
-					purchaseButton.msgArgs = newArgs;
-				}
-			}
-
-			// Update share button args to match current price
-			const shareButton = this.shareButtons.get(item.id);
-			if (shareButton) {
-				const newShareArgs = `${item.id}_${currentPrice}`;
-				if (shareButton.msgArgs !== newShareArgs) {
-					shareButton.msgArgs = newShareArgs;
+					labelsToUpdate.push({ label: priceLabel, newText, item, currentPrice });
 				}
 			}
 		});
+
+		if (labelsToUpdate.length > 0) {
+			// Fade out all price labels that need updating
+			const timeline = new Timeline(this.scene);
+			labelsToUpdate.forEach(({ label }) => {
+				timeline.create(label)
+					.to({ opacity: SHOP_CONFIG.PRICE_FADE_OPACITY }, SHOP_CONFIG.PRICE_FADE_DURATION);
+			});
+
+			// Update text and button args after fade out, then fade back in
+			this.scene.setTimeout(() => {
+				labelsToUpdate.forEach(({ label, newText, item, currentPrice }) => {
+					// Update price label text
+					label.text = newText;
+					label.invalidate();
+
+					// Update button args as well
+					this.updateButtonArgs(item, currentPrice);
+				});
+
+				// Fade back in
+				const fadeInTimeline = new Timeline(this.scene);
+				labelsToUpdate.forEach(({ label }) => {
+					fadeInTimeline.create(label)
+						.to({ opacity: 1 }, SHOP_CONFIG.PRICE_FADE_DURATION);
+				});
+			}, SHOP_CONFIG.PRICE_FADE_DURATION);
+		} else {
+			// No price changes, just update button args in case they're out of sync
+			availableItems.forEach(item => {
+				const currentPrice = this.getDynamicPrice(item);
+				this.updateButtonArgs(item, currentPrice);
+			});
+		}
+	}
+
+	/**
+	 * Updates button arguments for purchase and share buttons
+	 */
+	private updateButtonArgs(item: ItemData, currentPrice: number): void {
+		// Update purchase button args to match current price
+		const purchaseButton = this.purchaseButtons.get(item.id);
+		if (purchaseButton) {
+			const newArgs = `${item.id}_${currentPrice}`;
+			if (purchaseButton.msgArgs !== newArgs) {
+				purchaseButton.msgArgs = newArgs;
+			}
+		}
+
+		// Update share button args to match current price
+		const shareButton = this.shareButtons.get(item.id);
+		if (shareButton) {
+			const newShareArgs = `${item.id}_${currentPrice}`;
+			if (shareButton.msgArgs !== newShareArgs) {
+				shareButton.msgArgs = newShareArgs;
+			}
+		}
 	}
 
 	/**
@@ -1011,6 +1103,49 @@ export class ShopE extends g.E {
 		const minValidPrice = Math.floor(item.purchasePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO);
 		const maxValidPrice = item.purchasePrice * 3; // Updated to match enhanced price range
 		return dynamicPrice >= minValidPrice && dynamicPrice <= maxValidPrice;
+	}
+
+	/**
+	 * Shows market reaction notification based on shared price analysis
+	 * @param item The shared item
+	 * @param sharedPrice The price at which item was shared
+	 */
+	private showMarketReactionNotification(item: ItemData, sharedPrice: number): void {
+		const reactionType = this.analyzeMarketReaction(item, sharedPrice);
+		const notification = createMarketReactionNotification(item.name, sharedPrice, reactionType);
+		this.notificationManager.showNotification(notification);
+	}
+
+	/**
+	 * Analyzes market reaction based on pricing strategy
+	 * @param item The shared item
+	 * @param sharedPrice The price at which item was shared
+	 * @returns Market reaction type
+	 */
+	private analyzeMarketReaction(item: ItemData, sharedPrice: number): MarketReactionType {
+		// First, check if there are existing affiliate posts for this item
+		const existingLowestPost = this.onGetLowestPricePost ? this.onGetLowestPricePost(item.id) : null;
+
+		if (existingLowestPost) {
+			// Compare with existing affiliate posts
+			if (sharedPrice <= existingLowestPost.sharedPrice) {
+				// New lowest price among affiliate posts = 大注目（hot）
+				return "hot";
+			}
+			// If not lowest among affiliate posts, fall through to price-based analysis
+		}
+
+		// If no existing posts or not lowest, use price-based analysis relative to purchase price
+		const purchasePrice = item.purchasePrice; // 定価
+		const halfPrice = Math.floor(purchasePrice * 0.5); // 定価の半額
+
+		if (sharedPrice <= halfPrice) {
+			// 定価の半額以下 = 注目（warm）
+			return "warm";
+		} else {
+			// それ以外 = 通常投稿（cold）
+			return "cold";
+		}
 	}
 
 }

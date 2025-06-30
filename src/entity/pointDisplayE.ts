@@ -123,28 +123,28 @@ export class PointDisplayE extends g.E {
 					width: 160,
 					height: 20,
 					children: {
-						prefix: { x: 0, y: 0, width: 80, height: 20 },
-						number: { x: 80, y: 0, width: 80, height: 20 }
+						prefix: { x: 0, y: 0, width: 150, height: 20 },
+						number: { x: 150, y: 0, width: 80, height: 20 }
 					}
 				},
 				time: {
-					x: screenWidth - 300,
+					x: screenWidth - 350,
 					y: 0, // Set NumberE top edge to 0
 					width: 160,
 					height: 16,
 					children: {
-						prefix: { x: 0, y: 0, width: 80, height: 16 },
-						number: { x: 80, y: 0, width: 80, height: 16 }
+						prefix: { x: 0, y: 0, width: 150, height: 16 },
+						number: { x: 150, y: 0, width: 80, height: 16 }
 					}
 				},
 				player: {
-					x: Math.floor(screenWidth / 2) - 75, // Center position
-					y: 15,
-					width: 150,
+					x: Math.floor(screenWidth / 2), // Center position
+					y: 30, // center vertically
+					width: 0,
 					height: 30,
 					children: {
-						avatar: { x: 0, y: 0, width: 30, height: 30 },
-						name: { x: 35, y: 5, width: 115, height: 20 }
+						avatar: { x: -150, y: 0, width: 30, height: 30 },
+						name: { x: -100, y: 0, width: 300, height: 20 }
 					}
 				}
 			}
@@ -187,7 +187,7 @@ export class PointDisplayE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 32,
 				fontColor: "white",
 			}),
 			text: "スコア：",
@@ -200,6 +200,7 @@ export class PointDisplayE extends g.E {
 		this.scoreNumberE = new NumberE({
 			scene: this.scene,
 			value: this.score,
+			digits: 4,
 			x: scoreLayout.x + numberLayout.x,
 			y: scoreLayout.y + numberLayout.y,
 		});
@@ -220,7 +221,7 @@ export class PointDisplayE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 32,
 				fontColor: "white",
 			}),
 			text: "残り時間：",
@@ -282,11 +283,13 @@ export class PointDisplayE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 40,
 			}),
 			text: avatar,
 			x: playerLayout.x + avatarLayout.x,
 			y: playerLayout.y + avatarLayout.y,
+			anchorX: 0.5,
+			anchorY: 0.5,
 		});
 		this.append(this.playerAvatarLabel);
 
@@ -296,12 +299,13 @@ export class PointDisplayE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 32,
 				fontColor: "white",
 			}),
 			text: name,
 			x: playerLayout.x + nameLayout.x,
 			y: playerLayout.y + nameLayout.y,
+			anchorY: 0.5,
 		});
 		// Adjust name width to fit within allocated space
 		adjustLabelWidthToFit(this.playerNameLabel, nameLayout.width);

@@ -229,6 +229,15 @@ export class AdBannerE extends g.E {
 			x: this.layout.x,
 			y: this.layout.y,
 		});
+		const bannerBorder = new g.FilledRect({
+			scene: this.scene,
+			width: this.layout.width + 6,
+			height: this.layout.height + 6,
+			x: -3,
+			y: -3,
+			cssColor: "black"
+		});
+		container.append(bannerBorder);
 
 		// Banner background
 		const bannerBg = new g.FilledRect({

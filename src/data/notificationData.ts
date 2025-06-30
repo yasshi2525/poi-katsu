@@ -5,10 +5,14 @@ export type NotificationType =
 	| "point_earned"      // Points earned from various activities
 	| "task_completed"    // Task completion notifications
 	| "sale_campaign"     // Sale and campaign announcements
-	| "item_purchased"    // Item purchase confirmations
 	| "set_completed"     // Set completion bonuses
-	| "phase_unlock"      // New game phase unlocked
-	| "system_message";   // General system messages
+	| "system_message"    // General system messages
+	| "sns_reward"        // SNS task completion rewards
+	| "shopping_reward"   // Shopping task completion rewards
+	| "affiliate_reward"  // Affiliate system rewards
+	| "affiliate_leaderboard" // Affiliate earnings leaderboard updates
+	| "market_reaction"   // Market reaction to shared products
+	| "settlement";       // Settlement notifications for points earned
 
 /**
  * Notification priority levels for display ordering
@@ -51,8 +55,6 @@ export interface NotificationData {
 	displayedAt?: number;
 	/** Optional icon emoji for the notification */
 	icon?: string;
-	/** Optional points value associated with the notification */
-	points?: number;
 	/** Auto-dismiss timeout in milliseconds (0 = manual dismiss) */
 	autoDismissMs: number;
 }
@@ -85,7 +87,6 @@ export function createNotification(options: {
 		displayed: false,
 		createdAt: options.currentTime || 0,
 		icon: options.icon,
-		points: options.points,
 		autoDismissMs: options.autoDismissMs || 3000 // 3 seconds default
 	};
 }
@@ -117,19 +118,18 @@ export function markNotificationDisplayed(notification: NotificationData, curren
 }
 
 /**
- * Creates a point earned notification
+ * Creates a point earned by settlement notification
  * @param points Points earned
- * @param source Source of the points (e.g., "task", "banner", "purchase")
- * @returns Point earned notification
+ * @returns Point earned by settlement notification
  */
-export function createPointEarnedNotification(points: number, source: string): NotificationData {
+export function createSettlementNotification(points: number): NotificationData {
 	return createNotification({
-		type: "point_earned",
-		message: `${points}ポイント獲得！`,
-		description: `${source}から${points}ポイントを獲得しました`,
+		type: "settlement",
+		message: "精算終了！",
+		description: `手持ちのアイテムを換金し+${points}pt獲得！`,
 		priority: "medium",
 		timing: "immediate",
-		icon: "✨",
+		icon: "💰️",
 		points: points,
 		autoDismissMs: 2000
 	});
@@ -145,7 +145,7 @@ export function createTaskCompletedNotification(taskTitle: string, reward: strin
 	return createNotification({
 		type: "task_completed",
 		message: "タスク完了！",
-		description: `${taskTitle}を完了しました。${reward}を獲得！`,
+		description: `${taskTitle} ${reward}獲得！`,
 		priority: "high",
 		timing: "immediate",
 		icon: "🎉",
@@ -168,5 +168,100 @@ export function createSaleCampaignNotification(campaignTitle: string, discount: 
 		timing: "immediate",
 		icon: "🛍️",
 		autoDismissMs: 5000
+	});
+}
+
+/**
+ * Creates an affiliate reward notification
+ * @param rewardPoints Reward points earned
+ * @param buyerName Optional buyer name
+ * @returns Affiliate reward notification
+ */
+export function createAffiliateRewardNotification(rewardPoints: number, buyerName?: string): NotificationData {
+	const description = buyerName
+		? `${buyerName}さんの購入で+${rewardPoints}pt獲得！`
+		: `アフィリエイト報酬で+${rewardPoints}pt獲得！`;
+
+	return createNotification({
+		type: "affiliate_reward",
+		message: "アフィリエイト報酬！",
+		description,
+		priority: "high",
+		timing: "immediate",
+		icon: "💰",
+		autoDismissMs: 4000
+	});
+}
+
+/**
+ * Creates an affiliate leaderboard notification
+ * @param topPlayerName Name of the top earning player
+ * @param totalEarnings Total earnings amount
+ * @param isCurrentPlayer Whether the top player is the current player
+ * @returns Affiliate leaderboard notification
+ */
+export function createAffiliateLeaderboardNotification(
+	topPlayerName: string,
+	totalEarnings: number,
+	isCurrentPlayer: boolean
+): NotificationData {
+	const playerDisplayName = isCurrentPlayer ? `${topPlayerName}（あなた）` : topPlayerName;
+
+	return createNotification({
+		type: "affiliate_leaderboard",
+		message: "🏆 シェアトップ",
+		description: `${playerDisplayName} ${totalEarnings}pt`,
+		priority: "medium",
+		timing: "immediate",
+		icon: "📊",
+		autoDismissMs: 3000
+	});
+}
+
+/**
+ * Market reaction types for product shares
+ */
+export type MarketReactionType = "hot" | "warm" | "cold";
+
+/**
+ * Creates a market reaction notification for shared products
+ * @param productName Name of the shared product
+ * @param sharePrice Price at which the product was shared
+ * @param reactionType Type of market reaction based on pricing
+ * @returns Market reaction notification
+ */
+export function createMarketReactionNotification(
+	productName: string,
+	sharePrice: number,
+	reactionType: MarketReactionType
+): NotificationData {
+	const reactions = {
+		hot: {
+			message: "SNSで大反響！",
+			description: `みんなの反応：「${productName} がこんな安いの初めて見た！買うわ！」`,
+			icon: "🔥"
+		},
+		warm: {
+			message: "SNSで関心を集めています",
+			description: `みんなの反応：「この ${productName} 安いね～。買おうかな？」`,
+			icon: "👀"
+		},
+		cold: {
+			message: "タイムラインに投稿",
+			description: `「${productName}」${sharePrice}ptでシェア済み`,
+			icon: "📝"
+		}
+	};
+
+	const reaction = reactions[reactionType];
+
+	return createNotification({
+		type: "market_reaction",
+		message: reaction.message,
+		description: reaction.description,
+		priority: "medium",
+		timing: "immediate",
+		icon: reaction.icon,
+		autoDismissMs: 3000
 	});
 }

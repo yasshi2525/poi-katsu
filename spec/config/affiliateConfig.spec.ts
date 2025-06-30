@@ -16,8 +16,8 @@ describe("AFFILIATE_CONFIG", () => {
 		});
 
 		it("should have valid pricing configuration", () => {
-			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.3);
-			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.8);
+			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.4);
+			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.2);
 
 			// Verify types
 			expect(typeof AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe("number");
@@ -56,8 +56,8 @@ describe("AFFILIATE_CONFIG", () => {
 
 		it("should have consistent nested structure", () => {
 			// Verify structure consistency rather than runtime immutability
-			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.3);
-			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.8);
+			expect(AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO).toBe(0.4);
+			expect(AFFILIATE_CONFIG.PRICING.VOLATILITY).toBe(0.2);
 		});
 	});
 
@@ -101,14 +101,14 @@ describe("AFFILIATE_CONFIG", () => {
 		});
 
 		it("should have pricing parameters that create meaningful variation", () => {
-			// Volatility of 0.8 means prices can vary by ±80% (enhanced for dramatic changes)
+			// Volatility of 0.2 means prices can vary by ±20%
 			const basePrice = 100;
 			const maxVariation = basePrice * AFFILIATE_CONFIG.PRICING.VOLATILITY;
-			expect(maxVariation).toBe(80);
+			expect(maxVariation).toBe(20);
 
 			// Min price ratio ensures items don't become too cheap
 			const minPrice = basePrice * AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO;
-			expect(minPrice).toBe(Math.floor(basePrice * 0.3)); // Calculate expected value
+			expect(minPrice).toBe(Math.floor(basePrice * 0.4)); // Calculate expected value
 		});
 
 		it("should have UI dimensions suitable for game interface", () => {

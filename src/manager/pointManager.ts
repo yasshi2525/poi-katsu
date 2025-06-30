@@ -1,6 +1,5 @@
 
 import { GameContext } from "../data/gameContext";
-import { createPointEarnedNotification } from "../data/notificationData";
 import { PlayerData, updatePlayerPoints } from "../data/playerData";
 
 /**
@@ -32,6 +31,15 @@ interface ScoreBroadcastMessage {
 }
 
 /**
+ * Point transaction broadcast message data for multi-player synchronization
+ */
+interface TransactionBroadcastMessage {
+	playerId: string;
+	transactions: PointTransaction[];
+	totalScore: number;
+}
+
+/**
  * Centralized point constants for game balance tuning
  */
 export const POINT_CONSTANTS = {
@@ -48,7 +56,7 @@ export const POINT_CONSTANTS = {
 	SERIES_COLLECTION_BONUS: 1000,
 
 	// Ad banner reward points
-	AD_BANNER_CLICK_REWARD: 100,
+	AD_BANNER_CLICK_REWARD: 10,
 
 	// Shopping point back rate
 	SHOPPING_POINT_BACK_RATE: 0.5, // 50% point back rate
@@ -166,7 +174,7 @@ export class PointManager {
 
 		sources.forEach(source => {
 			const total = this.getTotalPointsFromSource(source);
-			if (total > 0) {
+			if (total !== 0) {
 				summary.set(source, total);
 			}
 		});
@@ -187,6 +195,36 @@ export class PointManager {
 					playerId: this.getCurrentPlayerId(),
 					score: finalScore
 				} as ScoreBroadcastMessage
+			};
+
+			this.game.raiseEvent(new g.MessageEvent(message));
+		}
+	}
+
+	/**
+	 * Broadcasts current player's transaction details for ranking display
+	 * Called during settlement phase to share detailed scoring information
+	 */
+	broadcastTransactionDetails(): void {
+		if (this.gameContext.gameMode.mode === "multi") {
+			const currentPlayerId = this.getCurrentPlayerId();
+			const playerTransactions = this.getTransactionHistory();
+			const totalScore = this.getCurrentPoints();
+
+			// Validate that transaction total equals current score
+			const transactionTotal = playerTransactions.reduce((sum, t) => sum + t.amount, 0);
+			if (transactionTotal !== totalScore) {
+				// Don't broadcast if validation fails
+				return;
+			}
+
+			const message = {
+				type: "transactionBroadcast",
+				transactionData: {
+					playerId: currentPlayerId,
+					transactions: playerTransactions,
+					totalScore: totalScore
+				} as TransactionBroadcastMessage
 			};
 
 			this.game.raiseEvent(new g.MessageEvent(message));
@@ -226,12 +264,6 @@ export class PointManager {
 
 		// Broadcast score update for multi-player
 		this.broadcastScore(updatedPlayer.points);
-
-		// Show notification if requested
-		if (showNotification && amount > 0) {
-			const notification = createPointEarnedNotification(amount, source);
-			this.gameContext.addNotification(notification);
-		}
 
 		return updatedPlayer;
 	}

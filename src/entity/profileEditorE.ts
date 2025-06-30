@@ -1,5 +1,6 @@
 import { resolvePlayerInfo } from "@akashic-extension/resolve-player-info";
 import { GameContext } from "../data/gameContext";
+import { NotificationManager } from "../manager/notificationManager";
 import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 import { RadioButtonGroupE, RadioButtonOption } from "./radioButtonGroupE";
@@ -17,6 +18,8 @@ export interface ProfileData {
  */
 export interface ProfileEditorParameterObject extends g.EParameterObject {
 	gameContext: GameContext;
+	/** Notification manager instance */
+	notificationManager: NotificationManager;
 	/** Screen width */
 	width: number;
 	/** Screen height */
@@ -38,6 +41,7 @@ export class ProfileEditorE extends g.E {
 	static assetIds: string[] = [];
 
 	private readonly gameContext: GameContext;
+	private readonly notificationManager: NotificationManager;
 	private readonly screenWidth: number;
 	private readonly screenHeight: number;
 	private readonly onComplete: () => void;
@@ -47,6 +51,8 @@ export class ProfileEditorE extends g.E {
 	private avatarSelection?: RadioButtonGroupE;
 	private nameButtonText?: g.Label;
 	private submitButton?: LabelButtonE<string>;
+	private snsConnectionContainer?: g.E;
+	private shoppingConnectionContainer?: g.E;
 
 	/**
 	 * Creates a new ProfileEditor instance
@@ -56,6 +62,7 @@ export class ProfileEditorE extends g.E {
 		super(options);
 
 		this.gameContext = options.gameContext;
+		this.notificationManager = options.notificationManager;
 		this.screenWidth = options.width;
 		this.screenHeight = options.height;
 		this.onComplete = options.onComplete;
@@ -70,6 +77,9 @@ export class ProfileEditorE extends g.E {
 
 		// Broadcast current profile on initialization if in multi mode
 		this.broadcastProfile();
+
+		// Listen for task achievement events to update connection status
+		this.setupTaskAchievementListener();
 	}
 
 	/**
@@ -99,6 +109,26 @@ export class ProfileEditorE extends g.E {
 			this.nameButtonText.text = playerName;
 			this.nameButtonText.invalidate();
 			adjustLabelWidthToFit(this.nameButtonText, 384 - 20);
+		}
+	}
+
+	/**
+	 * Sets up listener for task achievement events to update connection status
+	 */
+	private setupTaskAchievementListener(): void {
+		this.gameContext.on("taskAchieved", (taskId: string) => {
+			this.updateConnectionStatus(taskId);
+		});
+	}
+
+	/**
+	 * Updates connection status display when a relevant task is achieved
+	 */
+	private updateConnectionStatus(taskId: string): void {
+		if (taskId === "sns" && this.snsConnectionContainer) {
+			this.recreateConnectionItem("SNS", "sns", 50, this.snsConnectionContainer);
+		} else if (taskId === "shopping" && this.shoppingConnectionContainer) {
+			this.recreateConnectionItem("通販", "shopping", 50 + (216 + 16) * 2, this.shoppingConnectionContainer);
 		}
 	}
 
@@ -320,16 +350,24 @@ export class ProfileEditorE extends g.E {
 		this.append(connectionLabel);
 
 		// SNS connection status
-		this.createConnectionItem("SNS", "sns", 50);
+		this.snsConnectionContainer = this.createConnectionItem("SNS", "sns", 50);
 
 		// Shopping connection status
-		this.createConnectionItem("通販", "shopping", 50 + (216 + 16) * 2);
+		this.shoppingConnectionContainer = this.createConnectionItem("通販", "shopping", 50 + (216 + 16) * 2);
 	}
 
 	/**
 	 * Creates a single connection status item
 	 */
-	private createConnectionItem(serviceName: string, taskId: string, xPosition: number): void {
+	private createConnectionItem(serviceName: string, taskId: string, xPosition: number): g.E {
+		// Create a container for this connection item
+		const container = new g.E({
+			scene: this.scene,
+			x: 0,
+			y: 0,
+		});
+		this.append(container);
+
 		const isConnected = this.gameContext.hasAchievedTask(taskId);
 
 		// Service name label
@@ -347,7 +385,7 @@ export class ProfileEditorE extends g.E {
 			anchorX: 0.5,
 			anchorY: 0.5
 		});
-		this.append(serviceLabel);
+		container.append(serviceLabel);
 
 		if (isConnected) {
 			// Show connected status
@@ -365,7 +403,7 @@ export class ProfileEditorE extends g.E {
 				anchorX: 0.5,
 				anchorY: 0.5
 			});
-			this.append(statusLabel);
+			container.append(statusLabel);
 		} else {
 			// Show connect button
 			const connectButton = new LabelButtonE({
@@ -383,7 +421,28 @@ export class ProfileEditorE extends g.E {
 				fontSize: 36,
 				onComplete: (taskId: string) => this.handleConnectionRequest(taskId),
 			});
-			this.append(connectButton);
+			container.append(connectButton);
+		}
+
+		return container;
+	}
+
+	/**
+	 * Recreates a connection item with updated status
+	 */
+	private recreateConnectionItem(serviceName: string, taskId: string, xPosition: number, oldContainer: g.E): void {
+		// Remove the old container
+		this.remove(oldContainer);
+		oldContainer.destroy();
+
+		// Create a new container with updated status
+		const newContainer = this.createConnectionItem(serviceName, taskId, xPosition);
+
+		// Update the reference
+		if (taskId === "sns") {
+			this.snsConnectionContainer = newContainer;
+		} else if (taskId === "shopping") {
+			this.shoppingConnectionContainer = newContainer;
 		}
 	}
 

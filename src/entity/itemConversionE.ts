@@ -6,14 +6,14 @@ import { ItemCategory, SetInfo } from "../data/itemData";
  */
 const CONVERSION_CONFIG = {
 	// Layout constants
-	CONTAINER_WIDTH: 300,
-	CONTAINER_HEIGHT: 280,
+	CONTAINER_WIDTH: 500,
+	CONTAINER_HEIGHT: 500,
 	CONTENT_MARGIN: 15,
-	LINE_HEIGHT: 25,
+	LINE_HEIGHT: 45,
 	SECTION_SPACING: 20,
 
 	// Item display
-	ITEM_ICON_SIZE: 20,
+	ITEM_ICON_SIZE: 40,
 	ITEM_SPACING: 5,
 
 	// Colors
@@ -147,7 +147,7 @@ export class ItemConversionE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 40,
 				fontColor: "black"
 			})
 		});
@@ -158,10 +158,10 @@ export class ItemConversionE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 40,
 				fontColor: CONVERSION_CONFIG.HEADER_COLOR
 			}),
-			x: 30
+			x: 70
 		});
 
 		headerContainer.append(emoji);
@@ -169,7 +169,7 @@ export class ItemConversionE extends g.E {
 		this.append(headerContainer);
 
 		// Status indicator
-		const statusText = this.setInfo.isComplete ? "セット完成!" : "未完成";
+		const statusText = this.setInfo.isComplete ? "セット完成!" : "セット未完成";
 		const statusColor = this.setInfo.isComplete ? CONVERSION_CONFIG.COMPLETE_COLOR : CONVERSION_CONFIG.INCOMPLETE_COLOR;
 
 		const status = new g.Label({
@@ -178,10 +178,10 @@ export class ItemConversionE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 32,
 				fontColor: statusColor
 			}),
-			x: CONVERSION_CONFIG.CONTENT_MARGIN,
+			x: CONVERSION_CONFIG.CONTENT_MARGIN + 70,
 			y: startY + CONVERSION_CONFIG.LINE_HEIGHT
 		});
 
@@ -203,7 +203,7 @@ export class ItemConversionE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 32,
 				fontColor: CONVERSION_CONFIG.HEADER_COLOR
 			}),
 			x: CONVERSION_CONFIG.CONTENT_MARGIN,
@@ -212,43 +212,25 @@ export class ItemConversionE extends g.E {
 		this.append(itemsHeader);
 		currentY += CONVERSION_CONFIG.LINE_HEIGHT;
 
-		// Display owned items or empty message
-		if (this.setInfo.items.length === 0) {
-			const emptyMessage = new g.Label({
+		// Display each owned item
+		for (let i = 1; i < this.categoryInfo.numberOfSeries + 1; i++) {
+			const item = this.setInfo.items.find(item => item.seriesNumber === i);
+			const text = item ? "✅️" + item.name.replace(this.categoryInfo.name.replace("シリーズ", "") + " ", "") : "❌️";
+			const itemDisplay = new g.Label({
 				scene: this.scene,
-				text: "なし",
+				text: text,
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 12,
+					size: 24,
 					fontColor: CONVERSION_CONFIG.ITEM_COLOR
 				}),
-				x: CONVERSION_CONFIG.CONTENT_MARGIN + 10,
+				x: CONVERSION_CONFIG.CONTENT_MARGIN * 4 + (i - 1) * 80,
 				y: currentY
 			});
-			this.append(emptyMessage);
-			currentY += CONVERSION_CONFIG.LINE_HEIGHT;
-		} else {
-			// Display each owned item
-			for (const item of this.setInfo.items) {
-				const itemDisplay = new g.Label({
-					scene: this.scene,
-					text: `• ${item.emoji} ${item.name}`,
-					font: new g.DynamicFont({
-						game: this.scene.game,
-						fontFamily: "sans-serif",
-						size: 12,
-						fontColor: CONVERSION_CONFIG.ITEM_COLOR
-					}),
-					x: CONVERSION_CONFIG.CONTENT_MARGIN + 10,
-					y: currentY
-				});
-				this.append(itemDisplay);
-				currentY += CONVERSION_CONFIG.LINE_HEIGHT;
-			}
+			this.append(itemDisplay);
 		}
-
-		return currentY + CONVERSION_CONFIG.SECTION_SPACING;
+		return currentY + CONVERSION_CONFIG.LINE_HEIGHT + CONVERSION_CONFIG.SECTION_SPACING;
 	}
 
 	/**
@@ -264,7 +246,7 @@ export class ItemConversionE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 32,
 				fontColor: CONVERSION_CONFIG.HEADER_COLOR
 			}),
 			x: CONVERSION_CONFIG.CONTENT_MARGIN,
@@ -282,10 +264,10 @@ export class ItemConversionE extends g.E {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 12,
+					size: 24,
 					fontColor: CONVERSION_CONFIG.COMPLETE_COLOR
 				}),
-				x: CONVERSION_CONFIG.CONTENT_MARGIN + 10,
+				x: CONVERSION_CONFIG.CONTENT_MARGIN * 2,
 				y: currentY
 			});
 			this.append(setBonusText);
@@ -294,38 +276,18 @@ export class ItemConversionE extends g.E {
 			// Individual calculation
 			const individualText = new g.Label({
 				scene: this.scene,
-				text: `個別計算: ${this.setInfo.individualValue}pt`,
+				text: `換金単価: ${this.categoryInfo.individualPrice}pt ✕ ${this.setInfo.items.length}アイテム`,
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 12,
+					size: 24,
 					fontColor: CONVERSION_CONFIG.INCOMPLETE_COLOR
 				}),
-				x: CONVERSION_CONFIG.CONTENT_MARGIN + 10,
+				x: CONVERSION_CONFIG.CONTENT_MARGIN * 2,
 				y: currentY
 			});
 			this.append(individualText);
 			currentY += CONVERSION_CONFIG.LINE_HEIGHT;
-
-			// Show individual breakdown if items exist
-			if (this.setInfo.items.length > 0) {
-				for (const item of this.setInfo.items) {
-					const itemValue = new g.Label({
-						scene: this.scene,
-						text: `  ${item.name}: ${item.individualPrice}pt`,
-						font: new g.DynamicFont({
-							game: this.scene.game,
-							fontFamily: "sans-serif",
-							size: 10,
-							fontColor: CONVERSION_CONFIG.ITEM_COLOR
-						}),
-						x: CONVERSION_CONFIG.CONTENT_MARGIN + 20,
-						y: currentY
-					});
-					this.append(itemValue);
-					currentY += CONVERSION_CONFIG.LINE_HEIGHT * 0.8;
-				}
-			}
 		}
 
 		return currentY + CONVERSION_CONFIG.SECTION_SPACING;
@@ -352,11 +314,11 @@ export class ItemConversionE extends g.E {
 		const valueColor = this.setInfo.isComplete ? CONVERSION_CONFIG.COMPLETE_COLOR : CONVERSION_CONFIG.INCOMPLETE_COLOR;
 		const finalLabel = new g.Label({
 			scene: this.scene,
-			text: `精算額: ${finalValue}pt`,
+			text: `精算額: +${finalValue}pt`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 40,
 				fontColor: valueColor
 			}),
 			x: CONVERSION_CONFIG.CONTENT_MARGIN,
@@ -394,6 +356,7 @@ export class ItemConversionE extends g.E {
 	private animateFinalValue(valueLabel: g.E): void {
 		valueLabel.scaleX = 0.8;
 		valueLabel.scaleY = 0.8;
+		valueLabel.modified();
 
 		const timeline = new Timeline(this.scene);
 		timeline.create(valueLabel)

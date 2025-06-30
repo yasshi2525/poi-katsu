@@ -2,7 +2,7 @@ import { Timeline } from "@akashic-extension/akashic-timeline";
 import { GameContext } from "../data/gameContext";
 import { PlayerData } from "../data/playerData";
 import { getAllTaskMetadata } from "../data/taskConstants";
-import { PointManager } from "../manager/pointManager";
+import { PointManager, PointTransaction } from "../manager/pointManager";
 import { adjustLabelWidthToFit } from "../util/labelUtils";
 import { LabelButtonE } from "./labelButtonE";
 
@@ -11,15 +11,15 @@ import { LabelButtonE } from "./labelButtonE";
  */
 const BREAKDOWN_CONFIG = {
 	// Modal constants
-	MODAL_WIDTH: 500,
-	MODAL_HEIGHT: 485,
-	CONTENT_MARGIN: 20,
-	SECTION_SPACING: 25,
-	LINE_HEIGHT: 22,
+	MODAL_WIDTH: 750,
+	MODAL_HEIGHT: 610,
+	CONTENT_MARGIN: 30,
+	SECTION_SPACING: 35,
+	LINE_HEIGHT: 32,
 
 	// Scroll area
-	SCROLL_AREA_HEIGHT: 280,
-	ITEM_HEIGHT: 25,
+	SCROLL_AREA_HEIGHT: 350,
+	ITEM_HEIGHT: 32,
 
 	// Button constants
 	BUTTON_WIDTH: 180,
@@ -61,6 +61,7 @@ export class ScoreBreakdownE extends g.E {
 	private pointManager: PointManager;
 	private onCloseCallback: () => void;
 	private scoreItems: ScoreSource[];
+	private otherPlayerTransactions?: PointTransaction[];
 
 	constructor(param: {
 		scene: g.Scene;
@@ -68,12 +69,12 @@ export class ScoreBreakdownE extends g.E {
 		gameContext: GameContext;
 		pointManager: PointManager;
 		onClose: () => void;
+		otherPlayerTransactions?: PointTransaction[];
 	}) {
 		super({
 			scene: param.scene,
 			width: g.game.width,
-			height: g.game.height,
-			touchable: true
+			height: g.game.height
 		});
 
 		this.player = param.player;
@@ -81,6 +82,7 @@ export class ScoreBreakdownE extends g.E {
 		this.pointManager = param.pointManager;
 		this.onCloseCallback = param.onClose;
 		this.scoreItems = [];
+		this.otherPlayerTransactions = param.otherPlayerTransactions;
 
 		this.calculateScoreBreakdown();
 		this.setupBackground();
@@ -107,12 +109,55 @@ export class ScoreBreakdownE extends g.E {
 	private calculateScoreBreakdown(): void {
 		this.scoreItems = [];
 
+		// 他プレイヤーのトランザクション詳細が渡されている場合はそれを使用
+		if (this.otherPlayerTransactions && this.otherPlayerTransactions.length > 0) {
+			this.calculateFromTransactionHistory(this.otherPlayerTransactions);
+		} else {
+			// 現在プレイヤーの場合は既存の方法を使用
+			this.calculateFromCurrentPlayer();
+		}
+	}
+
+	/**
+	 * 他プレイヤーのトランザクション履歴からスコア詳細を計算
+	 */
+	private calculateFromTransactionHistory(transactions: PointTransaction[]): void {
+		// トランザクションをソース別にグループ化
+		const sourceGroups = new Map<string, PointTransaction[]>();
+
+		transactions.forEach(transaction => {
+			const existing = sourceGroups.get(transaction.source) || [];
+			existing.push(transaction);
+			sourceGroups.set(transaction.source, existing);
+		});
+
+		// 各ソースの詳細を表示
+		sourceGroups.forEach((transactionList, source) => {
+			const totalPoints = transactionList.reduce((sum, t) => sum + t.amount, 0);
+
+			if (totalPoints !== 0) {
+				this.scoreItems.push({
+					category: this.getSourceCategoryName(source),
+					description: this.getSourceDescription(source, transactionList.length),
+					points: totalPoints,
+					timestamp: Math.max(...transactionList.map(t => t.timestamp))
+				});
+			}
+		});
+
+		// タイムスタンプ順でソート
+		this.scoreItems.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+	}
+
+	/**
+	 * 現在プレイヤーのスコア詳細を計算（既存のロジック）
+	 */
+	private calculateFromCurrentPlayer(): void {
 		// Use centralized task metadata instead of duplicated lookup
 		const taskMetadata = getAllTaskMetadata();
 
 		// Show achieved tasks with their reward points
 		const achievedTaskIds = this.gameContext.getAchievedTaskIds();
-		let totalTaskPoints = 0;
 
 		if (achievedTaskIds.length > 0) {
 			for (const taskId of achievedTaskIds) {
@@ -124,7 +169,6 @@ export class ScoreBreakdownE extends g.E {
 						points: taskInfo.rewardPoints,
 						timestamp: Date.now() // Placeholder for task completion time
 					});
-					totalTaskPoints += taskInfo.rewardPoints;
 				}
 			}
 		}
@@ -139,19 +183,16 @@ export class ScoreBreakdownE extends g.E {
 			});
 		}
 
-		// Calculate specific point source categories from remaining points
-		const remainingPoints = this.player.points - totalTaskPoints;
-		if (remainingPoints > 0) {
-			// Break down remaining points into estimated categories
-			// This is an approximation since we don't have transaction history here
-			const estimatedBreakdown = this.estimatePointSourceBreakdown(remainingPoints);
+		// Calculate specific point source categories from PointManager transaction history
+		// Use actual transaction data instead of estimation
+		const actualBreakdown = this.estimatePointSourceBreakdown(0); // Parameter is not used when getting actual data
 
-			estimatedBreakdown.forEach(item => {
-				if (item.points > 0) {
-					this.scoreItems.push(item);
-				}
-			});
-		}
+		actualBreakdown.forEach(item => {
+			// Include both positive and negative points (earnings and spending)
+			if (item.points !== 0) {
+				this.scoreItems.push(item);
+			}
+		});
 
 		// Total is shown separately in footer, not in the breakdown list
 	}
@@ -181,17 +222,17 @@ export class ScoreBreakdownE extends g.E {
 				// Exclude tasks as they're handled separately, but include both positive and negative points
 				breakdown.push({
 					category: sourceDescriptions[source] || source,
-					description: this.getSourceDescription(source),
+					description: this.getSourceDescription(source, 1),
 					points: points,
 				});
 			}
 		});
 
 		// If no transaction history available, fall back to estimation
-		if (breakdown.length === 0 && totalNonTaskPoints > 0) {
+		if (breakdown.length === 0 && totalNonTaskPoints !== 0) {
 			breakdown.push({
 				category: "その他",
-				description: "各種活動による獲得ポイント",
+				description: totalNonTaskPoints > 0 ? "各種活動による獲得ポイント" : "各種活動による支出",
 				points: totalNonTaskPoints,
 			});
 		}
@@ -199,21 +240,6 @@ export class ScoreBreakdownE extends g.E {
 		return breakdown;
 	}
 
-	/**
-	 * Gets detailed Japanese description for point sources
-	 */
-	private getSourceDescription(source: string): string {
-		const descriptions: Record<string, string> = {
-			"ads": "バナー広告のクリック報酬",
-			"affiliate": "商品シェア・購入コミッション",
-			"shopping": "商品購入による支出",
-			"join": "サービス利用開始ボーナス",
-			"settlement": "所持アイテムのポイント変換",
-			"other": "タイムライン活動等"
-		};
-
-		return descriptions[source] || "各種ゲーム活動";
-	}
 
 	/**
 	 * Sets up overlay background
@@ -224,7 +250,8 @@ export class ScoreBreakdownE extends g.E {
 			width: this.width,
 			height: this.height,
 			cssColor: "rgba(0, 0, 0, 0.7)",
-			touchable: true
+			touchable: true,
+			local: true
 		});
 
 		// Prevent clicks from passing through
@@ -295,7 +322,7 @@ export class ScoreBreakdownE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 20,
+				size: 32,
 				fontColor: BREAKDOWN_CONFIG.HEADER_COLOR
 			}),
 			x: BREAKDOWN_CONFIG.CONTENT_MARGIN,
@@ -313,15 +340,15 @@ export class ScoreBreakdownE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 24,
 				fontColor: BREAKDOWN_CONFIG.NEUTRAL_COLOR
 			}),
 			x: BREAKDOWN_CONFIG.CONTENT_MARGIN,
-			y: startY + 25
+			y: startY + 40
 		});
 		modal.append(subtitle);
 
-		return startY + 60;
+		return startY + 80;
 	}
 
 	/**
@@ -344,7 +371,7 @@ export class ScoreBreakdownE extends g.E {
 		for (let i = 0; i < this.scoreItems.length; i++) {
 			const scoreItem = this.scoreItems[i];
 			const itemContainer = this.createScoreItem(scoreItem, i);
-			itemContainer.x = BREAKDOWN_CONFIG.CONTENT_MARGIN + 10;
+			itemContainer.x = BREAKDOWN_CONFIG.CONTENT_MARGIN;
 			itemContainer.y = itemY;
 			modal.append(itemContainer);
 			itemY += BREAKDOWN_CONFIG.ITEM_HEIGHT;
@@ -370,7 +397,7 @@ export class ScoreBreakdownE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 12,
+				size: 28,
 				fontColor: BREAKDOWN_CONFIG.CATEGORY_COLOR
 			}),
 			x: 0,
@@ -385,25 +412,28 @@ export class ScoreBreakdownE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 11,
+				size: 24,
 				fontColor: BREAKDOWN_CONFIG.NEUTRAL_COLOR
 			}),
-			x: 100,
+			x: 200,
 			y: 0
 		});
 		container.append(description);
 
 		// Points
 		const pointsColor = scoreItem.points > 0 ? BREAKDOWN_CONFIG.POSITIVE_COLOR : BREAKDOWN_CONFIG.NEGATIVE_COLOR;
-		const pointsText = scoreItem.points > 0 ? `+${scoreItem.points}pt` : `${scoreItem.points}pt`;
+		const formatPoints = Math.abs(scoreItem.points).toLocaleString();
+		const rightPositionPoints = formatPoints.length <= 6 ?
+			(new Array(6).fill(" ").join("") + formatPoints).slice(-6) : formatPoints;
+		const pointsText = scoreItem.points > 0 ? `+${rightPositionPoints}pt` : `-${rightPositionPoints}pt`;
 
 		const points = new g.Label({
 			scene: this.scene,
 			text: pointsText,
 			font: new g.DynamicFont({
 				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 12,
+				fontFamily: "monospace",
+				size: 24,
 				fontColor: pointsColor
 			}),
 			x: container.width - 80,
@@ -439,11 +469,11 @@ export class ScoreBreakdownE extends g.E {
 		// Total score
 		const totalLabel = new g.Label({
 			scene: this.scene,
-			text: `合計スコア: ${this.player.points}pt`,
+			text: `合計スコア: ${this.player.points.toLocaleString()}pt`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 32,
 				fontColor: BREAKDOWN_CONFIG.POSITIVE_COLOR
 			}),
 			x: BREAKDOWN_CONFIG.CONTENT_MARGIN,
@@ -524,6 +554,44 @@ export class ScoreBreakdownE extends g.E {
 				scaleY: 0.9
 			}, BREAKDOWN_CONFIG.FADE_IN_DURATION)
 			.call(onComplete);
+	}
+
+	/**
+	 * ソース名を日本語カテゴリ名に変換
+	 */
+	private getSourceCategoryName(source: string): string {
+		const categoryNames: Record<string, string> = {
+			"tasks": "タスク報酬",
+			"ads": "広告クリック",
+			"affiliate": "アフィリエイト",
+			"shopping": "ショッピング",
+			"join": "サービス参加",
+			"settlement": "アイテム精算",
+			"sns": "SNS活動",
+			"banner": "バナー広告",
+			"other": "その他活動"
+		};
+
+		return categoryNames[source] || source;
+	}
+
+	/**
+	 * ソースの説明文を生成
+	 */
+	private getSourceDescription(source: string, transactionCount: number): string {
+		const descriptions: Record<string, string> = {
+			"tasks": `タスク完了報酬 (${transactionCount}回)`,
+			"ads": `広告クリック報酬 (${transactionCount}回)`,
+			"affiliate": `アフィリエイト報酬 (${transactionCount}回)`,
+			"shopping": `ショッピング支出 (${transactionCount}回)`,
+			"join": `サービス参加報酬 (${transactionCount}回)`,
+			"settlement": `アイテム精算報酬 (${transactionCount}回)`,
+			"sns": `SNS活動報酬 (${transactionCount}回)`,
+			"banner": `バナー広告報酬 (${transactionCount}回)`,
+			"other": `その他活動 (${transactionCount}回)`
+		};
+
+		return descriptions[source] || `${source} (${transactionCount}回)`;
 	}
 
 }

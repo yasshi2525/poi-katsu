@@ -66,8 +66,7 @@ export class PlayerDetailE extends g.E {
 		super({
 			scene: param.scene,
 			width: g.game.width,
-			height: g.game.height,
-			touchable: true
+			height: g.game.height
 		});
 
 		this.player = param.player;
@@ -103,7 +102,8 @@ export class PlayerDetailE extends g.E {
 			width: this.width,
 			height: this.height,
 			cssColor: "rgba(0, 0, 0, 0.6)",
-			touchable: true
+			touchable: true,
+			local: true
 		});
 
 		// Prevent clicks from passing through
@@ -174,7 +174,7 @@ export class PlayerDetailE extends g.E {
 		const rankBadge = new g.FilledRect({
 			scene: this.scene,
 			width: 60,
-			height: 30,
+			height: 38,
 			x: DETAIL_CONFIG.CONTENT_MARGIN,
 			y: startY,
 			cssColor: DETAIL_CONFIG.RANK_COLOR
@@ -186,7 +186,7 @@ export class PlayerDetailE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 16,
+				size: 24,
 				fontColor: "white"
 			}),
 			x: 10,
@@ -203,7 +203,7 @@ export class PlayerDetailE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 32,
 				fontColor: DETAIL_CONFIG.HEADER_COLOR
 			}),
 			x: 100,
@@ -217,15 +217,15 @@ export class PlayerDetailE extends g.E {
 		// Total score
 		const totalScore = new g.Label({
 			scene: this.scene,
-			text: `総合スコア: ${this.player.points}pt`,
+			text: `総合スコア: ${this.player.points.toLocaleString()}pt`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 24,
 				fontColor: DETAIL_CONFIG.SCORE_COLOR
 			}),
 			x: 100,
-			y: startY + 30
+			y: startY + 40
 		});
 		modal.append(totalScore);
 
@@ -254,7 +254,7 @@ export class PlayerDetailE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 24,
 				fontColor: DETAIL_CONFIG.HEADER_COLOR
 			}),
 			x: DETAIL_CONFIG.CONTENT_MARGIN + 10,
@@ -263,13 +263,29 @@ export class PlayerDetailE extends g.E {
 		modal.append(sectionTitle);
 
 		// Avatar
-		const avatar = new g.FilledRect({
+		const avatarBackground = new g.FilledRect({
 			scene: this.scene,
 			width: DETAIL_CONFIG.AVATAR_SIZE,
 			height: DETAIL_CONFIG.AVATAR_SIZE,
 			x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-			y: startY + 40,
-			cssColor: "#3498db" // Default avatar color
+			y: startY + 50,
+			cssColor: this.player.id === this.gameContext.currentPlayer.id ?
+				"#ffe082" : "#95a5a6", // Amber for self-posted, gray for others
+		});
+		modal.append(avatarBackground);
+
+		const avatar = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 50,
+			}),
+			text: this.player.profile.avatar || "😀", // Default avatar if undefined
+			x: avatarBackground.x + avatarBackground.width / 2,
+			y: avatarBackground.y + avatarBackground.height / 2,
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		modal.append(avatar);
 
@@ -277,7 +293,7 @@ export class PlayerDetailE extends g.E {
 		const statsContainer = new g.E({
 			scene: this.scene,
 			x: DETAIL_CONFIG.CONTENT_MARGIN + 120,
-			y: startY + 40
+			y: startY + 50
 		});
 
 		const completedTasks = this.player.taskProgress?.size || 0;
@@ -288,27 +304,10 @@ export class PlayerDetailE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 24,
 				fontColor: DETAIL_CONFIG.HEADER_COLOR
 			})
 		});
-
-		// Show owned items count only for current player
-		if (this.player.id === this.gameContext.currentPlayer.id) {
-			const ownedItems = this.player.preSettlementItemCount ?? (this.player.ownedItems?.length || 0);
-			const itemsStat = new g.Label({
-				scene: this.scene,
-				text: `所持アイテム: ${ownedItems}個`,
-				font: new g.DynamicFont({
-					game: this.scene.game,
-					fontFamily: "sans-serif",
-					size: 14,
-					fontColor: DETAIL_CONFIG.HEADER_COLOR
-				}),
-				y: DETAIL_CONFIG.LINE_HEIGHT
-			});
-			statsContainer.append(itemsStat);
-		}
 
 		statsContainer.append(tasksStat);
 		modal.append(statsContainer);
@@ -338,7 +337,7 @@ export class PlayerDetailE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 24,
 				fontColor: DETAIL_CONFIG.HEADER_COLOR
 			}),
 			x: DETAIL_CONFIG.CONTENT_MARGIN + 10,
@@ -358,7 +357,7 @@ export class PlayerDetailE extends g.E {
 				height: 80,
 				fontSize: 32,
 				x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-				y: startY + 45,
+				y: startY + 55,
 				backgroundColor: "#689f38",
 				name: `score_breakdown_button_${this.player.id}`,
 				args: "show_breakdown",
@@ -366,20 +365,42 @@ export class PlayerDetailE extends g.E {
 			});
 			modal.append(this.breakdownButton);
 		} else {
-			// For other players: show "no details available" message
-			const noDetailsLabel = new g.Label({
-				scene: this.scene,
-				text: "詳細情報なし",
-				font: new g.DynamicFont({
-					game: this.scene.game,
+			// For other players: check if transaction details are available
+			const playerTransactions = this.gameContext.getPlayerTransactions(this.player.id);
+			if (playerTransactions && playerTransactions.length > 0) {
+				// Show breakdown button if transaction details are available
+				this.breakdownButton = new LabelButtonE({
+					scene: this.scene,
+					multi: this.gameContext.gameMode.mode === "multi",
+					text: "内訳表示",
 					fontFamily: "sans-serif",
-					size: 14,
-					fontColor: DETAIL_CONFIG.HEADER_COLOR
-				}),
-				x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
-				y: startY + 45
-			});
-			modal.append(noDetailsLabel);
+					width: 160,
+					height: 80,
+					fontSize: 32,
+					x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
+					y: startY + 55,
+					backgroundColor: "#689f38",
+					name: `score_breakdown_button_${this.player.id}`,
+					args: "show_breakdown",
+					onComplete: () => this.showOtherPlayerScoreBreakdown()
+				});
+				modal.append(this.breakdownButton);
+			} else {
+				// Show "no details available" message
+				const noDetailsLabel = new g.Label({
+					scene: this.scene,
+					text: "詳細情報なし",
+					font: new g.DynamicFont({
+						game: this.scene.game,
+						fontFamily: "sans-serif",
+						size: 24,
+						fontColor: DETAIL_CONFIG.HEADER_COLOR
+					}),
+					x: DETAIL_CONFIG.CONTENT_MARGIN + 20,
+					y: startY + 55
+				});
+				modal.append(noDetailsLabel);
+			}
 		}
 
 		return startY + DETAIL_CONFIG.SCORE_SECTION_HEIGHT + DETAIL_CONFIG.SECTION_SPACING;
@@ -426,6 +447,29 @@ export class PlayerDetailE extends g.E {
 	}
 
 	/**
+	 * Shows score breakdown for other players using broadcast transaction data
+	 */
+	private showOtherPlayerScoreBreakdown(): void {
+		if (this.scoreBreakdown) {
+			this.remove(this.scoreBreakdown);
+		}
+
+		const playerTransactions = this.gameContext.getPlayerTransactions(this.player.id);
+		if (playerTransactions && playerTransactions.length > 0) {
+			this.scoreBreakdown = new ScoreBreakdownE({
+				scene: this.scene,
+				player: this.player,
+				gameContext: this.gameContext,
+				pointManager: this.pointManager,
+				onClose: () => this.closeScoreBreakdown(),
+				otherPlayerTransactions: playerTransactions
+			});
+
+			this.append(this.scoreBreakdown);
+		}
+	}
+
+	/**
 	 * Closes score breakdown
 	 */
 	private closeScoreBreakdown(): void {
@@ -463,6 +507,8 @@ export class PlayerDetailE extends g.E {
 		modal.scaleY = 0.8;
 		border.scaleX = 0.8;
 		border.scaleY = 0.8;
+		modal.modified();
+		border.modified();
 
 		const timeline = new Timeline(this.scene);
 		timeline.create(modal)

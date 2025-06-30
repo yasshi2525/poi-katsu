@@ -281,7 +281,7 @@ export class AppListE extends g.E {
 						iconLabel: { x: 40, y: 40, width: 0, height: 0 },
 						badge: { x: 50, y: -5, width: 20, height: 20 }, // un-tuned
 						badgeLabel: { x: 56, y: 0, width: 8, height: 12 }, // un-tuned
-						nameLabel: { x: 40, y: 90, width: 0, height: 0 }
+						nameLabel: { x: 40, y: 80, width: 0, height: 0 }
 					}
 				}
 			}
@@ -321,6 +321,8 @@ export class AppListE extends g.E {
 				fontFamily: "sans-serif",
 				size: 24,
 				fontColor: "white",
+				strokeColor: "black",
+				strokeWidth: 3
 			}),
 			text: "アプリ",
 			x: this.layout.x + titleLayout.x,

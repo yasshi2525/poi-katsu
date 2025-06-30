@@ -171,6 +171,7 @@ export class MarketManager {
 		// Calculate price variation with DRAMATICALLY enhanced time factor effect
 		const volatility = AFFILIATE_CONFIG.PRICING.VOLATILITY;
 		const minRatio = AFFILIATE_CONFIG.PRICING.MIN_PRICE_RATIO;
+		const maxRatio = AFFILIATE_CONFIG.PRICING.MAX_PRICE_RATIO;
 
 		// EXTREME time factor effect: massive swings early, stability late
 		const timeVolatilityBoost = Math.pow(timeFactor, 0.3); // Cube root for even more dramatic early effect
@@ -187,7 +188,7 @@ export class MarketManager {
 
 		// Extended validation bounds for more dramatic price swings
 		const minValidPrice = Math.floor(basePrice * minRatio); // Can go as low as 30% of base
-		const maxValidPrice = Math.floor(basePrice * 3); // Can go as high as 3x base price
+		const maxValidPrice = Math.floor(basePrice * maxRatio); // Can go as high as 1.5x base price
 		if (dynamicPrice < minValidPrice || dynamicPrice > maxValidPrice) {
 			const clampedPrice = Math.max(minValidPrice, Math.min(maxValidPrice, dynamicPrice));
 			return clampedPrice;

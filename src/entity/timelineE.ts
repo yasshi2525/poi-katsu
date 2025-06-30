@@ -16,8 +16,7 @@ const ANIMATION_CONFIG = {
 	POST_FADE_IN_DURATION: 600,
 	POST_FADE_IN_DELAY: 200,
 	// Batch animation configuration
-	BATCH_POST_STAGGER: 150, // 複数投稿の段階的アニメーション間隔
-	BATCH_POST_MAX_SHOW: 3, // 一度に表示アニメーションする最大投稿数
+	BATCH_ANIMATION_TOTAL_DURATION: 500, // バッチアニメーション全体の最大時間（ms）
 } as const;
 
 /**
@@ -77,6 +76,7 @@ export class TimelineE extends g.E {
 	private affiliateButtons: Map<string, LabelButtonE<string>> = new Map();
 	private timelineItems: g.E[] = [];
 	private loadingOverlay?: g.E;
+	private currentModal?: ModalE<null>;
 	private scrollContainer?: g.Pane;
 	private scrollOffset: number = 0;
 	private maxScrollOffset: number = 0;
@@ -87,6 +87,20 @@ export class TimelineE extends g.E {
 	private batchPendingPosts: SharedPostData[] = [];
 	private batchProcessing: boolean = false;
 	private batchTimer?: g.TimerIdentifier;
+	// Sort and animation properties
+	private needsResort: boolean = false;
+	private resortTimer?: g.TimerIdentifier;
+	private lastSortTime: number = 0;
+	private readonly RESORT_COOLDOWN: number = 2000; // 2 second cooldown between resorts
+	private readonly avatarFont: g.Font;
+	private readonly userNameFont: g.Font;
+	private readonly disabledStyleActionFont: g.Font;
+	private readonly enabledStyleActionFont: g.Font;
+	private readonly disabledStylePriceFont: g.Font;
+	private readonly enabledStylePriceFont: g.Font;
+	private readonly disabledStylePriceSuffixFont: g.Font;
+	private readonly enabledStylePriceSuffixFont: g.Font;
+	private readonly loadingFont: g.Font;
 
 	/**
 	 * Creates a new Timeline instance
@@ -94,6 +108,63 @@ export class TimelineE extends g.E {
 	 */
 	constructor(options: TimelineParameterObject) {
 		super(options);
+
+		this.avatarFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 20,
+		});
+		this.userNameFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 18,
+			fontColor: "#2c3e50",
+			fontWeight: "bold",
+		});
+		this.disabledStyleActionFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 24,
+			fontColor: "#7f8c8d",
+		});
+		this.enabledStyleActionFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 24,
+			fontColor: "#34495e",
+		});
+		this.disabledStylePriceFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 28,
+			fontColor: "#95a5a6",
+			fontWeight: "bold",
+		});
+		this.enabledStylePriceFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 28,
+			fontColor: "#e74c3c",
+			fontWeight: "bold",
+		});
+		this.disabledStylePriceSuffixFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 24,
+			fontColor: "#7f8c8d",
+		});
+		this.enabledStylePriceSuffixFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 24,
+			fontColor: "#34495e",
+		});
+		this.loadingFont = new g.DynamicFont({
+			game: this.scene.game,
+			fontFamily: "sans-serif",
+			size: 14,
+			fontColor: "white",
+		});
 
 		this.multi = options.multi;
 		this.itemManager = options.itemManager;
@@ -116,6 +187,9 @@ export class TimelineE extends g.E {
 		// Add to batch processing queue
 		this.batchPendingPosts.push(sharedPost);
 
+		// Check if this new post affects the cheapest price labels
+		this.updateCheapestPriceLabels(sharedPost.item.id);
+
 		// Start batch processing if not already in progress
 		if (!this.batchProcessing && !this.batchTimer) {
 			this.startBatchProcessing();
@@ -132,14 +206,30 @@ export class TimelineE extends g.E {
 	}
 
 	/**
+	 * Force closes all modals in timeline
+	 */
+	forceCloseAllModals(): void {
+		if (this.currentModal) {
+			this.currentModal.destroy();
+			this.currentModal = undefined;
+		}
+	}
+
+	/**
 	 * Increments the purchase count for a specific shared post
 	 * @param postId The ID of the post to update
 	 */
 	incrementPurchaseCount(postId: string): void {
 		const sharedPost = this.sharedPosts.find(post => post.id === postId);
 		if (sharedPost) {
+			const oldPurchaseCount = sharedPost.purchaseCount;
 			sharedPost.purchaseCount++;
 			this.updatePurchaseCount(postId); // Update display without destroying children
+
+			// Check if this purchase count change might affect sort order
+			if (this.shouldTriggerResort(sharedPost, oldPurchaseCount)) {
+				this.requestSmartResort();
+			}
 		}
 	}
 
@@ -151,12 +241,309 @@ export class TimelineE extends g.E {
 	}
 
 	/**
+	 * External callback for when item prices change (from market dynamics)
+	 * Updates cheapest price labels accordingly
+	 * @param itemId The ID of the item whose price changed
+	 */
+	onItemPriceChanged(itemId: string): void {
+		this.updateCheapestPriceLabels(itemId);
+	}
+
+	/**
+	 * Gets all shared posts for a specific item
+	 * @param itemId Item ID to search for
+	 * @returns Array of shared posts for the specified item
+	 */
+	getPostsByItem(itemId: string): SharedPostData[] {
+		return this.sharedPosts.filter(post => post.item.id === itemId);
+	}
+
+	/**
+	 * Gets the lowest priced post for a specific item
+	 * @param itemId Item ID to search for
+	 * @returns The shared post with the lowest price, or null if no posts exist
+	 */
+	getLowestPricePost(itemId: string): SharedPostData | null {
+		const posts = this.getPostsByItem(itemId);
+		if (posts.length === 0) {
+			return null;
+		}
+		return posts.reduce((lowest, current) =>
+			current.sharedPrice < lowest.sharedPrice ? current : lowest
+		);
+	}
+
+	/**
+	 * Checks if a post has the lowest price for its item
+	 * @param post The post to check
+	 * @returns True if this post has the lowest price for its item
+	 */
+	private isLowestPricePost(post: SharedPostData): boolean {
+		const lowestPost = this.getLowestPricePost(post.item.id);
+		return lowestPost !== null && lowestPost.id === post.id;
+	}
+
+	/**
+	 * Updates cheapest price labels for all posts of a specific item
+	 * @param itemId The item ID to update labels for
+	 */
+	private updateCheapestPriceLabels(itemId: string): void {
+		const lowestPost = this.getLowestPricePost(itemId);
+		const postsForItem = this.getPostsByItem(itemId);
+
+		postsForItem.forEach(post => {
+			const postItem = this.timelineItems.find(item => (item as any).postId === post.id);
+			if (postItem) {
+				this.updatePostCheapestLabel(postItem, post, lowestPost?.id === post.id);
+			}
+		});
+	}
+
+	/**
+	 * Updates the cheapest price label for a specific post
+	 * @param postItem The timeline item to update
+	 * @param sharedPost The shared post data
+	 * @param isCheapest Whether this post is the cheapest
+	 */
+	private updatePostCheapestLabel(postItem: g.E, sharedPost: SharedPostData, isCheapest: boolean): void {
+		// Find the action text label by searching for the first Label that contains the item name
+		let actionTextLabel: g.Label | null = null;
+		if (postItem.children) {
+			for (const child of postItem.children) {
+				if (child instanceof g.Label && child.text.includes(sharedPost.item.name)) {
+					actionTextLabel = child;
+					break;
+				}
+			}
+		}
+
+		if (actionTextLabel) {
+			// Check if this is a self-posted item
+			const currentPlayerId = this.onGetPlayerId ? this.onGetPlayerId() : null;
+			const isSelfPosted = currentPlayerId && sharedPost.sharerId === currentPlayerId;
+
+			// Rebuild action text with or without cheapest label
+			const baseActionText = isSelfPosted
+				? `${sharedPost.item.emoji}${sharedPost.item.name}をシェアしました`
+				: `${sharedPost.item.emoji}${sharedPost.item.name}が今だけ`;
+			const newActionText = isCheapest ? `${baseActionText} [最安値]` : baseActionText;
+
+			// Update text content only
+			actionTextLabel.text = newActionText;
+			actionTextLabel.invalidate();
+		}
+	}
+
+	/**
+	 * Updates cheapest price labels for all items
+	 */
+	private updateAllCheapestPriceLabels(): void {
+		// Get unique item IDs from all shared posts
+		const itemIds = new Set(this.sharedPosts.map(post => post.item.id));
+
+		// Update labels for each item
+		itemIds.forEach(itemId => {
+			this.updateCheapestPriceLabels(itemId);
+		});
+	}
+
+	/**
+	 * Determines if a purchase count change should trigger a resort
+	 * @param post The post that was updated
+	 * @param oldCount The old purchase count
+	 * @returns True if resort should be triggered
+	 */
+	private shouldTriggerResort(post: SharedPostData, oldCount: number): boolean {
+		const newCount = post.purchaseCount;
+
+		// Resort if this post might have moved up significantly
+		if (newCount >= 5 && oldCount < 5) return true; // Border appearance change
+		if (newCount >= 10 && oldCount < 10) return true; // Border color change
+
+		// Check if this post might have overtaken others in sort order
+		const postsWithHigherCounts = this.sharedPosts.filter(p =>
+			p.id !== post.id && p.purchaseCount <= newCount
+		);
+
+		// Resort if this post could potentially move up in ranking
+		return postsWithHigherCounts.length > 0;
+	}
+
+	/**
+	 * Requests a smart resort with cooldown protection
+	 */
+	private requestSmartResort(): void {
+		this.needsResort = true;
+
+		// Check cooldown
+		const currentTime = this.scene.game.age;
+		if (currentTime - this.lastSortTime < this.RESORT_COOLDOWN) {
+			// Schedule for later if not already scheduled
+			if (!this.resortTimer) {
+				const remainingCooldown = this.RESORT_COOLDOWN - (currentTime - this.lastSortTime);
+				this.resortTimer = this.scene.setTimeout(() => {
+					this.resortTimer = undefined;
+					if (this.needsResort) {
+						this.executeSmartResort();
+					}
+				}, remainingCooldown);
+			}
+			return;
+		}
+
+		// Execute immediately if cooldown has passed
+		this.executeSmartResort();
+	}
+
+	/**
+	 * Gets shared posts sorted by purchase count (descending)
+	 * @returns Array of shared posts sorted by purchase frequency
+	 */
+	private getSortedPostsByPurchaseCount(): SharedPostData[] {
+		return [...this.sharedPosts].sort((a, b) => {
+			// Sort by purchase count (descending), then by share time (newest first)
+			if (b.purchaseCount !== a.purchaseCount) {
+				return b.purchaseCount - a.purchaseCount;
+			}
+			return b.sharedAt - a.sharedAt;
+		});
+	}
+
+	/**
+	 * Executes smart resort with slide animation
+	 */
+	private executeSmartResort(): void {
+		if (this.isAnimating || this.timelineItems.length === 0) {
+			return;
+		}
+
+		this.needsResort = false;
+		this.lastSortTime = this.scene.game.age;
+
+		// Get current order and desired order
+		const currentOrder = this.getCurrentPostOrder();
+		const sortedPosts = this.getSortedPostsByPurchaseCount();
+		const desiredOrder = sortedPosts.map(post => post.id);
+
+		// Check if reordering is actually needed
+		if (this.arraysEqual(currentOrder, desiredOrder)) {
+			return;
+		}
+
+		// Animate the reordering
+		this.animatePostReorder(currentOrder, desiredOrder);
+	}
+
+	/**
+	 * Gets the current order of posts by their IDs
+	 * @returns Array of post IDs in current display order
+	 */
+	private getCurrentPostOrder(): string[] {
+		return this.timelineItems
+			.filter(item => (item as any).postId)
+			.map(item => (item as any).postId);
+	}
+
+	/**
+	 * Checks if two arrays are equal
+	 * @param arr1 First array
+	 * @param arr2 Second array
+	 * @returns True if arrays are equal
+	 */
+	private arraysEqual(arr1: string[], arr2: string[]): boolean {
+		if (arr1.length !== arr2.length) return false;
+		return arr1.every((value, index) => value === arr2[index]);
+	}
+
+	/**
+	 * Animates post reordering with smooth slide transitions
+	 * @param currentOrder Current order of post IDs
+	 * @param desiredOrder Desired order of post IDs
+	 */
+	private animatePostReorder(currentOrder: string[], desiredOrder: string[]): void {
+		if (currentOrder.length === 0 || desiredOrder.length === 0) return;
+
+		this.isAnimating = true;
+
+		// Create mapping from post ID to timeline item
+		const postItems = new Map<string, g.E>();
+		this.timelineItems.forEach(item => {
+			const postId = (item as any).postId;
+			if (postId) {
+				postItems.set(postId, item);
+			}
+		});
+
+		// Calculate new positions for each post
+		const moveAnimations: Array<{ item: g.E; newY: number }> = [];
+
+		desiredOrder.forEach((postId, newIndex) => {
+			const item = postItems.get(postId);
+			if (item) {
+				const newY = newIndex * 90 + this.scrollOffset;
+				if (Math.abs(item.y - newY) > 1) { // Only animate if position actually changes
+					moveAnimations.push({ item, newY });
+				}
+			}
+		});
+
+		// If no animations needed, complete immediately
+		if (moveAnimations.length === 0) {
+			this.isAnimating = false;
+			return;
+		}
+
+		// Create timeline for animations
+		const timeline = new Timeline(this.scene);
+
+		// Animate all position changes simultaneously
+		moveAnimations.forEach(({ item, newY }) => {
+			timeline.create(item).to({ y: newY }, ANIMATION_CONFIG.POST_SHIFT_DURATION);
+		});
+
+		// Complete animation
+		timeline.create(this)
+			.wait(ANIMATION_CONFIG.POST_SHIFT_DURATION)
+			.call(() => {
+				// Update the timeline items array to match new order
+				this.reorderTimelineItems(desiredOrder, postItems);
+				this.isAnimating = false;
+			});
+	}
+
+	/**
+	 * Reorders the timelineItems array to match the new post order
+	 * @param desiredOrder The desired order of post IDs
+	 * @param postItems Map from post ID to timeline item
+	 */
+	private reorderTimelineItems(desiredOrder: string[], postItems: Map<string, g.E>): void {
+		const reorderedItems: g.E[] = [];
+
+		// Add posts in new order
+		desiredOrder.forEach(postId => {
+			const item = postItems.get(postId);
+			if (item) {
+				reorderedItems.push(item);
+			}
+		});
+
+		// Add non-post items (guide items) at the end
+		this.timelineItems.forEach(item => {
+			if (!(item as any).postId) {
+				reorderedItems.push(item);
+			}
+		});
+
+		this.timelineItems = reorderedItems;
+	}
+
+	/**
 	 * Starts batch processing timer
 	 */
 	private startBatchProcessing(): void {
 		this.batchTimer = this.scene.setTimeout(() => {
 			this.processBatchedPosts();
-		}, ANIMATION_CONFIG.BATCH_POST_STAGGER);
+		}, 3000); // 3 second delay for batching posts to reduce frequent updates
 	}
 
 	/**
@@ -170,8 +557,8 @@ export class TimelineE extends g.E {
 		this.batchProcessing = true;
 		this.batchTimer = undefined;
 
-		// Get posts to process (in reverse order for proper timeline placement)
-		const postsToProcess = this.batchPendingPosts.reverse();
+		// Get posts to process
+		const postsToProcess = [...this.batchPendingPosts];
 		this.batchPendingPosts = [];
 
 		// Add all posts to data structure first
@@ -184,6 +571,11 @@ export class TimelineE extends g.E {
 			// Timeline is hidden, add posts without animation
 			this.addBatchedPostsSilently(postsToProcess);
 			this.batchProcessing = false;
+
+			// Check if there are pending posts that need to be processed
+			if (this.batchPendingPosts.length > 0 && !this.batchTimer) {
+				this.startBatchProcessing();
+			}
 		}
 	}
 
@@ -197,69 +589,72 @@ export class TimelineE extends g.E {
 		// Create loading overlay during animation
 		this.createTimelineLoadingOverlay();
 
-		// Create timeline for batch animation
+		// Only add new posts without recreating existing ones
+		this.addNewPostsWithAnimation(posts);
+	}
+
+	/**
+	 * Adds new posts with animation while preserving existing posts
+	 * @param newPosts Array of new posts to add
+	 */
+	private addNewPostsWithAnimation(newPosts: SharedPostData[]): void {
+		// Create timeline for animations
 		const timeline = new Timeline(this.scene);
 
 		// First, shift existing posts down by the number of new posts
-		const shiftDistance = posts.length * 90; // 90px per post
+		const shiftDistance = newPosts.length * 90;
 		this.timelineItems.forEach((item) => {
 			const newY = item.y + shiftDistance;
 			timeline.create(item).to({ y: newY }, ANIMATION_CONFIG.POST_SHIFT_DURATION);
 		});
 
-		// After shift animation, create and fade in new posts with staggered timing
+		// After shift animation, create and fade in new posts
 		timeline.create(this).wait(ANIMATION_CONFIG.POST_SHIFT_DURATION).call(() => {
-			this.addBatchedPostsWithStagger(posts);
+			this.createAndInsertNewPosts(newPosts);
 		});
 	}
 
 	/**
-	 * Adds batched posts with staggered fade-in animation
+	 * Creates and inserts new posts at the top with fade-in animation
+	 * @param newPosts Array of new posts to create
 	 */
-	private addBatchedPostsWithStagger(posts: SharedPostData[]): void {
-		// Limit the number of posts that get animated to prevent overwhelming the UI
-		const postsToAnimate = posts.slice(0, ANIMATION_CONFIG.BATCH_POST_MAX_SHOW);
-		const postsToAddSilently = posts.slice(ANIMATION_CONFIG.BATCH_POST_MAX_SHOW);
+	private createAndInsertNewPosts(newPosts: SharedPostData[]): void {
+		const newItems: g.E[] = [];
 
-		// Add non-animated posts silently first
-		postsToAddSilently.forEach((post, index) => {
+		// Create new posts with opacity 0 for fade-in effect
+		newPosts.forEach((post, index) => {
 			const postY = index * 90 + this.scrollOffset;
-			const newPost = this.createAffiliateTimelineItem(post, index, postY);
-			this.timelineItems.unshift(newPost);
+			const newPost = this.createAffiliateTimelineItem(post, 0, postY);
+			newPost.opacity = 0;
+			newPost.modified();
+			newItems.push(newPost);
 		});
 
-		// Animate the remaining posts with staggered timing
-		postsToAnimate.forEach((post, index) => {
-			const delay = index * ANIMATION_CONFIG.BATCH_POST_STAGGER;
-			const postIndex = postsToAddSilently.length + index;
-			this.scene.setTimeout(() => {
-				const postY = postIndex * 90 + this.scrollOffset;
-				const newPost = this.createAffiliateTimelineItem(post, postIndex, postY);
+		// Insert new items at the beginning of the timeline
+		this.timelineItems.unshift(...newItems);
 
-				// Start with opacity 0 for fade-in effect
-				newPost.opacity = 0;
-				newPost.modified();
-				this.timelineItems.unshift(newPost);
-
-				// Fade in the new post
-				const fadeTimeline = new Timeline(this.scene);
-				fadeTimeline.create(newPost)
-					.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
-					.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION)
-					.call(() => {
-						// If this is the last post being animated, complete the batch
-						if (index === postsToAnimate.length - 1) {
-							this.completeBatchAnimation();
-						}
-					});
-			}, delay);
-		});
-
-		// If no posts were animated, complete immediately
-		if (postsToAnimate.length === 0) {
+		// If no posts to animate, complete immediately
+		if (newItems.length === 0) {
 			this.completeBatchAnimation();
+			return;
 		}
+
+		// Fade in new posts simultaneously
+		const fadeTimeline = new Timeline(this.scene);
+		newItems.forEach(newPost => {
+			fadeTimeline.create(newPost)
+				.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
+				.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION);
+		});
+
+		// Complete batch animation when fade-in finishes
+		fadeTimeline.create(this)
+			.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY + ANIMATION_CONFIG.POST_FADE_IN_DURATION)
+			.call(() => {
+				this.completeBatchAnimation();
+			});
 	}
+
 
 	/**
 	 * Adds batched posts without animation (when timeline is hidden)
@@ -267,7 +662,7 @@ export class TimelineE extends g.E {
 	private addBatchedPostsSilently(posts: SharedPostData[]): void {
 		posts.forEach((post, index) => {
 			const postY = index * 90 + this.scrollOffset;
-			const newPost = this.createAffiliateTimelineItem(post, index, postY);
+			const newPost = this.createAffiliateTimelineItem(post, 0, postY);
 			this.timelineItems.unshift(newPost);
 		});
 
@@ -287,6 +682,28 @@ export class TimelineE extends g.E {
 		this.isAnimating = false;
 		this.batchProcessing = false;
 		this.destroyTimelineLoadingOverlay();
+
+		// Update max scroll offset to account for new content
+		this.updateMaxScrollOffset();
+
+		// Update cheapest price labels for all items after batch processing
+		this.updateAllCheapestPriceLabels();
+
+		// Check if there are pending posts that need to be processed
+		if (this.batchPendingPosts.length > 0 && !this.batchTimer) {
+			this.startBatchProcessing();
+		}
+	}
+
+	/**
+	 * Updates the maximum scroll offset based on current content
+	 */
+	private updateMaxScrollOffset(): void {
+		if (!this.scrollContainer) return;
+
+		const totalContentHeight = this.timelineItems.length * 90;
+		const containerHeight = this.scrollContainer.height;
+		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
 	}
 
 	/**
@@ -314,12 +731,10 @@ export class TimelineE extends g.E {
 					width: 700,
 					height: 90,
 					children: {
-						avatar: { x: 0, y: 0, width: 40, height: 40 },
-						userName: { x: 50, y: 5, width: 150, height: 14 },
-						actionText: { x: 50, y: 25, width: 450, height: 12 },
-						priceText: { x: 50, y: 40, width: 200, height: 12 },
-						likeBtn: { x: 50, y: 60, width: 50, height: 12 },
-						commentBtn: { x: 120, y: 60, width: 70, height: 12 },
+						avatar: { x: 5, y: 30, width: 30, height: 30 },
+						userName: { x: 40, y: 5, width: 460, height: 18 },
+						actionText: { x: 40, y: 28, width: 460, height: 24 },
+						priceText: { x: 40, y: 57, width: 460, height: 28 },
 						buyBtn: { x: 510, y: 5, width: 120, height: 80 }
 					}
 				}
@@ -355,20 +770,23 @@ export class TimelineE extends g.E {
 		if (!this.isScrolling || !this.scrollContainer || this.isAnimating) {
 			return;
 		}
-
 		const oldScrollOffset = this.scrollOffset;
-		this.scrollOffset = this.lastScrollY + ev.startDelta.y;
+		const newScrollOffset = this.lastScrollY + ev.startDelta.y;
 
 		// Clamp scroll offset (negative values scroll down, positive scroll up)
-		this.scrollOffset = Math.max(-this.maxScrollOffset, Math.min(this.scrollOffset, 0));
+		const clampedScrollOffset = Math.max(-this.maxScrollOffset, Math.min(newScrollOffset, 0));
 
 		// Round scroll offset to prevent micro-movements
-		this.scrollOffset = Math.round(this.scrollOffset);
+		const roundedScrollOffset = Math.round(clampedScrollOffset);
+
 
 		// Only update if scroll offset actually changed significantly
-		if (Math.abs(oldScrollOffset - this.scrollOffset) < 1) {
+		if (Math.abs(oldScrollOffset - roundedScrollOffset) < 1) {
 			return;
 		}
+
+		// Update scroll offset
+		this.scrollOffset = roundedScrollOffset;
 
 		// Update all timeline items position based on scroll offset
 		this.timelineItems.forEach((item, index) => {
@@ -406,6 +824,8 @@ export class TimelineE extends g.E {
 				fontFamily: "sans-serif",
 				size: 20,
 				fontColor: "white",
+				strokeColor: "black",
+				strokeWidth: 3
 			}),
 			text: "タイムライン",
 			x: this.layout.x + titleLayout.x,
@@ -459,9 +879,7 @@ export class TimelineE extends g.E {
 		this.scrollContainer!.append(newPost);
 
 		// Update max scroll offset to account for new content
-		const totalContentHeight = this.timelineItems.length * 90;
-		const containerHeight = this.scrollContainer!.height;
-		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
+		this.updateMaxScrollOffset();
 	}
 
 	/**
@@ -491,17 +909,20 @@ export class TimelineE extends g.E {
 	 */
 	private createTimelineItems(): void {
 		const defaultItems = [
-			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーがシェアした商品を購入できます",
+			{ user: "[ガイド]", action: "📱 タイムラインでは他のプレイヤーが\nシェアした商品を購入できます",
 				reactions: { like: true, comment: true } },
-			{ user: "[ガイド]", action: "💰 アフィリエイト機能で商品をシェアして、購入されるとポイント獲得！", reactions: { like: true, comment: true } },
-			{ user: "[ガイド]", action: "🛒 商品をどんどんシェアして、アフィリエイト報酬を得ましょう！", reactions: { like: true, comment: true } },
-			{ user: "[ガイド]", action: "💹 商品の価格は変化しますが、シェアされた商品はそのときの価格で購入できます", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "💰 アフィリエイト機能で商品をシェアして、\n購入されるとポイント獲得！", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "🛒 商品をどんどんシェアして、\nアフィリエイト報酬を得ましょう！", reactions: { like: true, comment: true } },
+			{ user: "[ガイド]", action: "💹 商品の価格は変化しますが、シェアされた商品は\nそのときの価格で購入できます", reactions: { like: true, comment: true } },
 		];
 
 		let itemIndex = 0;
 
-		// Add shared posts first
-		this.sharedPosts.forEach((sharedPost) => {
+		// Sort shared posts by purchase count (descending) before displaying
+		const sortedPosts = this.getSortedPostsByPurchaseCount();
+
+		// Add sorted shared posts first
+		sortedPosts.forEach((sharedPost) => {
 			const itemY = itemIndex * 90; // Relative to scroll container
 			const postItem = this.createAffiliateTimelineItem(sharedPost, 0, itemY); // X is 0 relative to container
 			this.timelineItems.push(postItem);
@@ -522,9 +943,7 @@ export class TimelineE extends g.E {
 		});
 
 		// Calculate max scroll offset based on content height
-		const totalContentHeight = itemIndex * 90;
-		const containerHeight = this.scrollContainer!.height;
-		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
+		this.updateMaxScrollOffset();
 	}
 
 	/**
@@ -551,57 +970,77 @@ export class TimelineE extends g.E {
 			y: y,
 		});
 
-		// Post background for visibility
-		const postBackground = new g.FilledRect({
+		// Store postId for later reference
+		(postContainer as any).postId = sharedPost.id;
+
+		const borderColor = this.getBorderColor(sharedPost.purchaseCount);
+
+		// Post border
+		const postBorder = new g.FilledRect({
 			scene: this.scene,
 			width: itemLayout.width,
 			height: itemLayout.height,
 			x: 0,
 			y: 0,
+			cssColor: borderColor,
+		});
+		postContainer.append(postBorder);
+
+		// Post background for visibility
+		const postBackground = new g.FilledRect({
+			scene: this.scene,
+			width: itemLayout.width - 10,
+			height: itemLayout.height - 10,
+			x: 5,
+			y: 5,
 			cssColor: "white",
 		});
 		postContainer.append(postBackground);
 
 		// User avatar (circle) - different color for self-posted
-		const avatar = new g.FilledRect({
+		const avatarBackground = new g.FilledRect({
 			scene: this.scene,
 			width: avatarLayout.width,
 			height: avatarLayout.height,
 			x: avatarLayout.x,
 			y: avatarLayout.y,
-			cssColor: isSelfPosted ? "#95a5a6" : "#3498db", // Gray for self-posted, blue for others
+			cssColor: isSelfPosted ? "#95a5a6" : "#ffe082", // Gray for self-posted, amber for others
+		});
+		postContainer.append(avatarBackground);
+
+		const avatar = new g.Label({
+			scene: this.scene,
+			font: this.avatarFont,
+			text: sharedPost.sharerAvatar || "😀", // Default avatar if undefined
+			x: avatarLayout.x + avatarBackground.width / 2,
+			y: avatarLayout.y + avatarBackground.height / 2,
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		postContainer.append(avatar);
 
 		// User name
 		const userName = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "#2c3e50",
-				fontWeight: "bold",
-			}),
-			text: sharedPost.sharerName,
+			font: this.userNameFont,
+			text: (sharedPost.sharerName || "unknown") + (isSelfPosted ? " (あなた)" : ""),
 			x: userNameLayout.x,
 			y: userNameLayout.y,
 		});
 		postContainer.append(userName);
 
-		// Action text - different for self-posted items
-		const actionTextContent = isSelfPosted
-			? `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (自分の投稿・${sharedPost.purchaseCount}人が購入)`
-			: `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました！`;
+		// Check if this is the lowest price post for this item
+		const isLowestPrice = this.isLowestPricePost(sharedPost);
+
+		// Action text - different for self-posted items, with cheapest price label
+		const baseActionText = isSelfPosted
+			? `${sharedPost.item.emoji}${sharedPost.item.name}をシェアしました`
+			: `${sharedPost.item.emoji}${sharedPost.item.name}が今だけ`;
+		const actionTextContent = isLowestPrice ? `${baseActionText} [最安値]` : baseActionText;
 
 		const actionText = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 12,
-				fontColor: isSelfPosted ? "#7f8c8d" : "#34495e", // Muted color for self-posted
-			}),
+			font: isSelfPosted ? this.disabledStyleActionFont : this.enabledStyleActionFont,
 			text: actionTextContent,
 			x: actionTextLayout.x,
 			y: actionTextLayout.y,
@@ -609,22 +1048,26 @@ export class TimelineE extends g.E {
 		});
 		postContainer.append(actionText);
 
-		// Price text - muted styling for self-posted items
+		// Price text - muted styling for self-posted items, no longer contains cheapest label
 		const priceText = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 11,
-				fontColor: isSelfPosted ? "#95a5a6" : "#e74c3c", // Muted color for self-posted
-				fontWeight: isSelfPosted ? "normal" : "bold", // Normal weight for self-posted
-			}),
-			text: `価格: ${sharedPost.sharedPrice}pt (アフィリエイト) / 定価: ${sharedPost.item.purchasePrice}pt`,
+			font: isSelfPosted ? this.disabledStylePriceFont : this.enabledStylePriceFont,
+			text: `限定: ${sharedPost.sharedPrice}pt`,
 			x: priceTextLayout.x,
 			y: priceTextLayout.y,
 		});
 		postContainer.append(priceText);
 
+		const priceSuffixText = new g.Label({
+			scene: this.scene,
+			font: isSelfPosted ? this.disabledStylePriceSuffixFont : this.enabledStylePriceSuffixFont,
+			text: `(定価: ${sharedPost.item.purchasePrice}pt, ${sharedPost.purchaseCount}人が購入)`,
+			x: priceText.x + priceText.width + 10, // Position after price text
+			y: priceText.y + priceText.height,
+			anchorY: 1, // Align to bottom of price text
+		});
+
+		postContainer.append(priceSuffixText);
 
 		// Only show buy button for non-self-posted items
 		if (!isSelfPosted) {
@@ -781,13 +1224,26 @@ export class TimelineE extends g.E {
 			y: y,
 		});
 
-		// Post background for visibility
-		const postBackground = new g.FilledRect({
+		const borderColor = this.getBorderColor(0); // Default border color
+
+		// Post border
+		const postBorder = new g.FilledRect({
 			scene: this.scene,
 			width: itemLayout.width,
 			height: itemLayout.height,
 			x: 0,
 			y: 0,
+			cssColor: borderColor,
+		});
+		postContainer.append(postBorder);
+
+		// Post background for visibility
+		const postBackground = new g.FilledRect({
+			scene: this.scene,
+			width: itemLayout.width - 10,
+			height: itemLayout.height - 10,
+			x: 5,
+			y: 5,
 			cssColor: "white",
 		});
 		postContainer.append(postBackground);
@@ -806,13 +1262,7 @@ export class TimelineE extends g.E {
 		// User name
 		const userName = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "#2c3e50",
-				fontWeight: "bold",
-			}),
+			font: this.userNameFont,
 			text: user,
 			x: userNameLayout.x,
 			y: userNameLayout.y,
@@ -820,20 +1270,17 @@ export class TimelineE extends g.E {
 		postContainer.append(userName);
 
 		// Action text
-		const actionText = new g.Label({
-			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 12,
-				fontColor: "#34495e",
-			}),
-			text: action,
-			x: actionTextLayout.x,
-			y: actionTextLayout.y,
-			width: actionTextLayout.width,
+		action.split("\n").map((text, i) => {
+			const actionText = new g.Label({
+				scene: this.scene,
+				font: this.enabledStyleActionFont,
+				text: text,
+				x: actionTextLayout.x,
+				y: actionTextLayout.y + i * (actionTextLayout.height + 5),
+				width: actionTextLayout.width,
+			});
+			postContainer.append(actionText);
 		});
-		postContainer.append(actionText);
 
 		// Append container to scroll container and return it
 		this.scrollContainer!.append(postContainer);
@@ -844,7 +1291,12 @@ export class TimelineE extends g.E {
 	 * Shows an error modal with button reactivation
 	 */
 	private showErrorModal(title: string, message: string, postId: string): void {
-		const modal = new ModalE({
+		// Close existing modal if present
+		if (this.currentModal) {
+			this.currentModal.destroy();
+		}
+
+		this.currentModal = new ModalE({
 			scene: this.scene,
 			multi: this.multi,
 			name: `error_modal_${postId}`,
@@ -857,10 +1309,11 @@ export class TimelineE extends g.E {
 				if (button) {
 					button.reactivate();
 				}
+				this.currentModal = undefined;
 			}
 		});
 
-		this.scene.append(modal);
+		this.scene.append(this.currentModal);
 	}
 
 	/**
@@ -869,7 +1322,12 @@ export class TimelineE extends g.E {
 	private showSuccessModal(item: ItemData, price: number): void {
 		const successMessage = `アフィリエイト商品を購入しました！\n\n${item.emoji} ${item.name}\n価格: ${price}pt`;
 
-		const modal = new ModalE({
+		// Close existing modal if present
+		if (this.currentModal) {
+			this.currentModal.destroy();
+		}
+
+		this.currentModal = new ModalE({
 			scene: this.scene,
 			multi: this.multi,
 			name: `success_modal_${item.id}`,
@@ -878,10 +1336,11 @@ export class TimelineE extends g.E {
 			message: successMessage,
 			onClose: () => {
 				// No reactivation needed for success modal
+				this.currentModal = undefined;
 			}
 		});
 
-		this.scene.append(modal);
+		this.scene.append(this.currentModal);
 	}
 
 	/**
@@ -895,6 +1354,7 @@ export class TimelineE extends g.E {
 					button.touchable = false;
 					button.setBackgroundColor("#95a5a6"); // Gray color for disabled
 					button.setTextColor("#7f8c8d"); // Darker gray text
+					button.setText("所持済"); // Update text to indicate already owned
 				}
 			}
 		});
@@ -910,20 +1370,37 @@ export class TimelineE extends g.E {
 		const sharedPost = this.sharedPosts.find(post => post.id === postId);
 		if (!sharedPost) return;
 
-		// Find the corresponding timeline item
-		const postIndex = this.sharedPosts.indexOf(sharedPost);
-		if (postIndex >= 0 && postIndex < this.timelineItems.length) {
-			const postItem = this.timelineItems[postIndex];
-			// Update action text to reflect new purchase count for all posts
-			const actionTextLabel = postItem.children && postItem.children[3]; // Assuming action text is forth child
-			if (actionTextLabel && actionTextLabel instanceof g.Label) {
-				const isSelfPosted = sharedPost.sharerId === this.scene.game.selfId;
-				const newText = isSelfPosted
-					? `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (自分の投稿・${sharedPost.purchaseCount}人が購入)`
-					: `${sharedPost.item.emoji} ${sharedPost.item.name}をシェアしました (${sharedPost.purchaseCount}人が購入)`;
-				actionTextLabel.text = newText;
-				actionTextLabel.invalidate();
+		// Find the corresponding timeline item by searching for the one with matching postId in its tag
+		const postItem = this.timelineItems.find(item => (item as any).postId === postId);
+		if (postItem) {
+			// Update price suffix text to reflect new purchase count
+			const priceSuffixTextLabel = postItem.children && postItem.children[7]; // Assuming price suffix is 8th child
+			if (priceSuffixTextLabel && priceSuffixTextLabel instanceof g.Label) {
+				const newText = `(定価: ${sharedPost.item.purchasePrice}pt, ${sharedPost.purchaseCount}人が購入)`;
+				priceSuffixTextLabel.text = newText;
+				priceSuffixTextLabel.invalidate();
 			}
+
+			// Update border styling if purchase count thresholds are crossed
+			this.updatePostBorderStyling(postItem, sharedPost);
+		}
+	}
+
+	/**
+	 * Updates border styling for a post based on purchase count
+	 * @param postItem The timeline item to update
+	 * @param sharedPost The shared post data
+	 */
+	private updatePostBorderStyling(postItem: g.E, sharedPost: SharedPostData): void {
+		// Find the border element (first child if exists)
+		const firstChild = postItem.children && postItem.children[0];
+		if (firstChild && firstChild instanceof g.FilledRect) {
+		// Check if border styling needs to be updated
+			const borderColor = this.getBorderColor(sharedPost.purchaseCount);
+
+			// Update existing border color
+			firstChild.cssColor = borderColor;
+			firstChild.modified();
 		}
 	}
 
@@ -979,12 +1456,7 @@ export class TimelineE extends g.E {
 		// Loading text
 		const loadingText = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white",
-			}),
+			font: this.loadingFont,
 			text: "更新中...",
 			x: this.layout.width / 2 - 25,
 			y: this.layout.height / 2 + 20,
@@ -1006,65 +1478,12 @@ export class TimelineE extends g.E {
 	}
 
 	/**
-	 * Animates the addition of a new post with smooth transitions
+	 * // Determine border styling based on purchase count
+	 * @param purchaseCount The number of purchases for the item
 	 */
-	private animateNewPost(): void {
-		// Disable scrolling during animation
-		this.isAnimating = true;
-
-		// Create loading overlay during animation
-		this.createTimelineLoadingOverlay();
-
-		// Create timeline that will handle the animation
-		const timeline = new Timeline(this.scene);
-
-		// First, shift existing posts down
-		this.timelineItems.forEach((item, index) => {
-			const newY = item.y + 90; // Shift down by one post height
-			timeline.create(item).to({ y: newY }, ANIMATION_CONFIG.POST_SHIFT_DURATION);
-		});
-
-		// After shift animation, create and fade in new post
-		timeline.create(this).wait(ANIMATION_CONFIG.POST_SHIFT_DURATION).call(() => {
-			// Create new post at the top
-			const newPostY = this.scrollOffset;
-			const newPost = this.createAffiliateTimelineItem(this.sharedPosts[0], 0, newPostY);
-
-			// Start with opacity 0 for fade-in effect
-			newPost.opacity = 0;
-			newPost.modified();
-			this.timelineItems.unshift(newPost);
-
-			// Fade in the new post
-			const fadeTimeline = new Timeline(this.scene);
-			fadeTimeline.create(newPost)
-				.wait(ANIMATION_CONFIG.POST_FADE_IN_DELAY)
-				.to({ opacity: 1 }, ANIMATION_CONFIG.POST_FADE_IN_DURATION)
-				.call(() => {
-					const totalContentHeight = this.timelineItems.length * 90;
-					const containerHeight = this.scrollContainer!.height;
-					this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
-
-					// Fix all item positions after animation to prevent drift
-					this.fixItemPositions();
-
-					// Re-enable scrolling after animation
-					this.isAnimating = false;
-
-					// Animation complete, remove loading overlay
-					this.destroyTimelineLoadingOverlay();
-				});
-		});
-	}
-
-	/**
-	 * Fixes all item positions to their exact calculated values to prevent drift
-	 */
-	private fixItemPositions(): void {
-		this.timelineItems.forEach((item, index) => {
-			const correctY = index * 90 + this.scrollOffset;
-			item.y = correctY;
-			item.modified();
-		});
-	}
+	private getBorderColor(purchaseCount: number): string  {
+		if (purchaseCount >= 10) return "#ffd700"; // Gold border for 10+ purchases
+		if (purchaseCount >= 5) return "#c0c0c0";  // Silver border for 5+ purchases
+		return "#eeeeee"; // Default light gray border
+	};
 }

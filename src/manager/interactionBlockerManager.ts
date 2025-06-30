@@ -1,10 +1,18 @@
 /**
+ * 中断処理のハンドラー関数型
+ */
+export interface InterruptionHandler {
+	(): void;
+}
+
+/**
  * ユーザー操作制御を管理する専用クラス
  * 複数のコンポーネントからの禁止要求を管理し、すべてが解除されるまでオーバーレイを維持する
  */
 export class InteractionBlockerManager {
 	private scene: g.Scene;
 	private activeBlockers: Set<string> = new Set();
+	private interruptionHandlers: Map<string, InterruptionHandler> = new Map();
 	private overlay?: g.E;
 	private readonly screenWidth: number;
 	private readonly screenHeight: number;
@@ -25,9 +33,15 @@ export class InteractionBlockerManager {
 	 * ユーザー操作を禁止する
 	 * @param blockerId 禁止要求を識別するユニークID
 	 * @param reason 禁止理由（互換性のため残存、現在未使用）
+	 * @param interruptionHandler 中断要求時の処理（nullの場合は中断不可）
 	 */
-	blockInteraction(blockerId: string, reason?: string): void {
+	blockInteraction(blockerId: string, reason?: string, interruptionHandler?: InterruptionHandler | null): void {
 		this.activeBlockers.add(blockerId);
+
+		// 中断ハンドラーを登録（nullでない場合のみ）
+		if (interruptionHandler !== null && interruptionHandler !== undefined) {
+			this.interruptionHandlers.set(blockerId, interruptionHandler);
+		}
 
 		// オーバーレイがまだ存在しない場合のみ作成
 		if (!this.overlay) {
@@ -41,6 +55,7 @@ export class InteractionBlockerManager {
 	 */
 	unblockInteraction(blockerId: string): void {
 		this.activeBlockers.delete(blockerId);
+		this.interruptionHandlers.delete(blockerId);
 
 		// すべての禁止要求が解除された場合のみオーバーレイを削除
 		if (this.activeBlockers.size === 0 && this.overlay) {
@@ -74,11 +89,48 @@ export class InteractionBlockerManager {
 	}
 
 	/**
+	 * 全ての中断可能なロックに対して中断要求を送信し、一定時間待機後に強制解除
+	 * @param timeoutMs 中断要求後の待機時間（ミリ秒）
+	 * @returns 全てのロックが解除された場合true
+	 */
+	requestInterruption(timeoutMs: number = 2000): Promise<boolean> {
+		return new Promise((resolve) => {
+			// 中断可能なロックがない場合は即座に完了
+			if (this.interruptionHandlers.size === 0) {
+				resolve(true);
+				return;
+			}
+
+			// 全ての中断ハンドラーを実行
+			for (const [blockerId, handler] of this.interruptionHandlers) {
+				try {
+					handler();
+				} catch (error) {
+					console.error(`[InteractionBlocker] Error in interruption handler for ${blockerId}:`, error);
+				}
+			}
+
+			// 指定時間待機
+			this.scene.setTimeout(() => {
+				const remainingBlockers = this.activeBlockers.size;
+				if (remainingBlockers > 0) {
+					console.warn(`[InteractionBlocker] ${remainingBlockers} blockers still active after timeout, forcing unblock`);
+					this.forceUnblockAll();
+					resolve(false);
+				} else {
+					resolve(true);
+				}
+			}, timeoutMs);
+		});
+	}
+
+	/**
 	 * すべての禁止要求を強制解除（緊急時用）
 	 */
 	forceUnblockAll(): void {
 		console.warn(`[InteractionBlocker] Force unblocking all ${this.activeBlockers.size} active blockers`);
 		this.activeBlockers.clear();
+		this.interruptionHandlers.clear();
 		if (this.overlay) {
 			this.removeOverlay();
 		}

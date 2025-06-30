@@ -32,6 +32,9 @@ const ANIMATION_CONFIG = {
 	TASK_FADE_OUT_DURATION: 500,
 	TASK_FADE_OUT_TARGET_OPACITY: 0,
 	TASK_POSITION_SHIFT_DURATION: 300,
+	// New task fade-in animation
+	TASK_FADE_IN_DURATION: 400,
+	TASK_FADE_IN_INITIAL_OPACITY: 0,
 } as const;
 
 /**
@@ -106,7 +109,17 @@ export class TaskListE extends g.E {
 	completeTaskExternal(taskId: string): void {
 		const taskItem = this.taskItems.get(taskId);
 		if (!taskItem) {
-			console.error(`Task item with id ${taskId} not found`);
+			const availableTasks = Array.from(this.taskItems.keys()).join(", ");
+			console.warn(`Task item with id ${taskId} not found in taskItems. Available tasks: ${availableTasks}`);
+			// Check if the task exists in the tasks array but hasn't been rendered yet
+			const taskData = this.tasks.find(task => task.id === taskId);
+			if (taskData) {
+				console.warn(`Task ${taskId} exists in tasks array but not in taskItems. Marking as completed directly.`);
+				taskData.completed = true;
+				this.onTaskComplete(taskData);
+			} else {
+				console.error(`Task ${taskId} not found in tasks array either.`);
+			}
 			return;
 		}
 
@@ -161,7 +174,7 @@ export class TaskListE extends g.E {
 			const index = activeTasks.findIndex(t => t.id === task.id);
 			if (index >= 0) {
 				const taskY = this.layout.y + this.layout.children!.item.y + (index * this.layout.children!.item.height);
-				this.createTaskItem(task, this.layout.children!.item.x, taskY);
+				this.createTaskItem(task, this.layout.children!.item.x, taskY, true); // Enable fade-in animation for new tasks
 			}
 		});
 
@@ -256,6 +269,8 @@ export class TaskListE extends g.E {
 				fontFamily: "sans-serif",
 				size: 24,
 				fontColor: "white",
+				strokeColor: "black",
+				strokeWidth: 3
 			}),
 			text: "タスク",
 			x: this.layout.x + titleLayout.x,
@@ -279,7 +294,7 @@ export class TaskListE extends g.E {
 	/**
 	 * Creates a single task item
 	 */
-	private createTaskItem(task: TaskData, x: number, y: number): void {
+	private createTaskItem(task: TaskData, x: number, y: number, animate: boolean = false): void {
 		const itemLayout = this.layout.children!.item;
 		const iconLayout = itemLayout.children!.icon;
 		const titleLayout = itemLayout.children!.title;
@@ -291,6 +306,7 @@ export class TaskListE extends g.E {
 			scene: this.scene,
 			x: x,
 			y: y,
+			opacity: animate ? ANIMATION_CONFIG.TASK_FADE_IN_INITIAL_OPACITY : 1,
 		});
 
 		// Task background with margin
@@ -382,6 +398,13 @@ export class TaskListE extends g.E {
 		this.taskItems.set(task.id, taskItem);
 
 		this.append(container);
+
+		// Fade-in animation for new tasks
+		if (animate) {
+			const timeline = new Timeline(this.scene);
+			timeline.create(container)
+				.to({ opacity: 1 }, ANIMATION_CONFIG.TASK_FADE_IN_DURATION);
+		}
 	}
 
 	/**
@@ -569,9 +592,6 @@ export class TaskListE extends g.E {
 		const taskItem = this.taskItems.get(taskId);
 		if (!taskItem) return;
 
-		// Disable interaction during fade-out
-		taskItem.container.touchable = false;
-
 		// Create local Timeline instance for this animation
 		const timeline = new Timeline(this.scene);
 		timeline.create(taskItem.container)
@@ -644,4 +664,5 @@ export class TaskListE extends g.E {
 				y: newY
 			}, ANIMATION_CONFIG.TASK_POSITION_SHIFT_DURATION);
 	}
+
 }

@@ -17,7 +17,6 @@ export class TitleScene extends BaseScene {
 	private isJoined: boolean = false;
 	private joinedPlayers: Set<string> = new Set<string>();
 	private buttonCounter: number = 0;
-	private isAutoCoinRunning: boolean = false;
 
 	constructor(param: g.SceneParameterObject & { mode: "multi" | "ranking"; totalTimeLimit: number }) {
 		super({
@@ -57,7 +56,7 @@ export class TitleScene extends BaseScene {
 		this.createGameConceptText();
 		this.createPlayerCount();
 		this.createJoinButton();
-		this.createDummyButton();
+		this.startAutoCoinCollection();
 		this.startFallingCoins();
 
 		// メッセージハンドラーを設定
@@ -110,7 +109,7 @@ export class TitleScene extends BaseScene {
 				size: 90,
 				fontColor: "#f39c12",
 				strokeColor: "#2c3e50",
-				strokeWidth: 8
+				strokeWidth: 16
 			}),
 			x: this.game.width / 2,
 			y: 70,
@@ -127,7 +126,7 @@ export class TitleScene extends BaseScene {
 				size: 48,
 				fontColor: "#ecf0f1",
 				strokeColor: "#2c3e50",
-				strokeWidth: 4
+				strokeWidth: 8
 			}),
 			x: this.game.width / 2,
 			y: 160,
@@ -143,13 +142,25 @@ export class TitleScene extends BaseScene {
 	private createGameConceptText(): void {
 		const conceptLines = [
 			"SNS連携、広告タップ、通販でポイントゲット！",
-			"セールを狙って商品購入、フリマで換金",
+			"セールを狙って商品購入",
 			"シリーズ商品をコンプリートして超ボーナス！",
 			"次々と解禁される機能を使いこなして",
 			"ポイント長者を目指せ！"
 		];
 
 		const conceptContainer = new g.E({ scene: this });
+
+		const conceptBackground = new g.FilledRect({
+			scene: this,
+			width: 800,
+			height: 200,
+			x: this.game.width / 2,
+			y: 220,
+			cssColor: "black",
+			anchorX: 0.5
+		});
+		conceptContainer.append(conceptBackground);
+
 		conceptLines.forEach((line, index) => {
 			const label = new g.Label({
 				scene: this,
@@ -158,9 +169,7 @@ export class TitleScene extends BaseScene {
 					game: this.game,
 					fontFamily: "sans-serif",
 					size: 24,
-					fontColor: "#bdc3c7",
-					strokeColor: "black",
-					strokeWidth: 2
+					fontColor: "#bdc3c7"
 				}),
 				x: this.game.width / 2,
 				y: 240 + (index * 36),
@@ -321,42 +330,6 @@ export class TitleScene extends BaseScene {
 		this.joinButtonLabel = joinButton as any;
 	}
 
-	private createDummyButton(): void {
-		const button = new g.FilledRect({
-			scene: this,
-			cssColor: "#ffa000",
-			width: 180,
-			height: 80,
-			x: this.game.width / 2,
-			y: this.game.height - 270,
-			anchorX: 0.5,
-			anchorY: 0.5,
-			touchable: true
-		});
-
-		button.onPointUp.add(() => {
-			this.startAutoCoinCollection();
-		});
-
-		const label = new g.Label({
-			scene: this,
-			text: "ポイント獲得",
-			font: new g.DynamicFont({
-				game: this.game,
-				fontFamily: "sans-serif",
-				size: 24,
-				fontColor: "white"
-			}),
-			x: button.x,
-			y: button.y,
-			anchorX: 0.5,
-			anchorY: 0.5,
-		});
-
-		this.append(button);
-		this.append(label);
-	}
-
 	private broadcastMessage(action: "join" | "leave"): void {
 		const messageData = {
 			type: "playerAction",
@@ -402,29 +375,12 @@ export class TitleScene extends BaseScene {
 
 
 	private startAutoCoinCollection(): void {
-		// 既に実行中の場合は停止し、実行中でない場合は開始
-		if (this.isAutoCoinRunning) {
-			this.isAutoCoinRunning = false;
-			return;
-		}
-
-		this.isAutoCoinRunning = true;
-
 		const ANIMATION_CONFIG = {
 			AUTO_COLLECT_INTERVAL: 200, // 0.2秒間隔で連打演出
-			AUTO_COLLECT_COUNT: 15, // 15回連打（3秒間相当）
 		} as const;
 
-		let collectCount = 0;
-
 		const autoCollect = (): void => {
-			if (!this.isAutoCoinRunning || collectCount >= ANIMATION_CONFIG.AUTO_COLLECT_COUNT) {
-				this.isAutoCoinRunning = false;
-				return;
-			}
-
 			this.collectCoin();
-			collectCount++;
 			this.setTimeout(() => autoCollect(), ANIMATION_CONFIG.AUTO_COLLECT_INTERVAL);
 		};
 

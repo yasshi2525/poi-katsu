@@ -10,6 +10,8 @@ export interface SharedPostData {
 	sharerId: string;
 	/** Name of player who shared the item */
 	sharerName: string;
+	/** Avatar of player who shared the item */
+	sharerAvatar: string;
 	/** Shared item data */
 	item: ItemData;
 	/** Price at which item was shared */
@@ -28,8 +30,9 @@ export interface SharedPostData {
  */
 export function createSharedPost(options: {
 	id: string;
-	sharerId: string;
+	sharerId?: string;
 	sharerName: string;
+	sharerAvatar?: string;
 	item: ItemData;
 	sharedPrice: number;
 	sharedAt: number;
@@ -38,8 +41,9 @@ export function createSharedPost(options: {
 }): SharedPostData {
 	return {
 		id: options.id,
-		sharerId: options.sharerId,
+		sharerId: options.sharerId ?? "test_player",
 		sharerName: options.sharerName,
+		sharerAvatar: options.sharerAvatar ?? "😀",
 		item: options.item,
 		sharedPrice: options.sharedPrice,
 		sharedAt: options.sharedAt,

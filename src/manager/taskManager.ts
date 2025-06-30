@@ -18,7 +18,7 @@ export interface TaskExecutionContext {
 	onShopAppReveal: (onComplete?: () => void) => void;
 	onModalCreate: (modal: ModalE<string>) => void;
 	onModalClose: (taskId?: string) => void;
-	onAchievementShow: (task: TaskData, notificationType?: string) => void;
+	onAchievementShow: (task: TaskData) => void;
 	onTaskComplete: (taskId: string) => void;
 	onTaskListRefresh?: () => void;
 	onTaskButtonReactivate?: (taskId: string) => void;
@@ -356,9 +356,6 @@ export class TaskManager {
 		this.context.scene.setTimeout(() => {
 			this.context.onTimelineReveal();
 		}, TaskManager.ANIMATION_CONFIG.MODAL_CLOSE_DELAY);
-
-		// Show special SNS achievement notification
-		this.context.onAchievementShow(taskData, "sns");
 	}
 
 	/**
@@ -382,9 +379,6 @@ export class TaskManager {
 		if (this.context.onTaskListRefresh) {
 			this.context.onTaskListRefresh();
 		}
-
-		// Show special shopping achievement notification
-		this.context.onAchievementShow(taskData, "shopping");
 	}
 
 	/**

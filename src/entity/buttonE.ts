@@ -44,6 +44,19 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 	private pressedBy?: number;
 	private onCompleteHandler?: (args: T) => void;
 	private loadingOverlay?: g.E;
+	private static _loadingFont?: g.Font;
+
+	private static loadingFont(game: g.Game): g.Font {
+		if (!this._loadingFont) {
+			this._loadingFont = new g.DynamicFont({
+				game: game,
+				fontFamily: "sans-serif",
+				size: 16,
+				fontColor: "white",
+			});
+		}
+		return this._loadingFont;
+	}
 
 	/**
 	 * Creates a new ButtonE instance
@@ -237,7 +250,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 			scene: this.scene,
 			width: this.scene.game.width,
 			height: this.scene.game.height,
-			cssColor: "rgba(0,0,0,0.3)",
+			cssColor: "rgba(0,0,0,0.05)",
 		});
 		this.loadingOverlay.append(background);
 
@@ -265,12 +278,7 @@ export abstract class ButtonE<T, A extends ButtonEParameterObject<T>> extends g.
 		// Loading text
 		const loadingText = new g.Label({
 			scene: this.scene,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: "white",
-			}),
+			font: ButtonE.loadingFont(this.scene.game),
 			text: "処理中...",
 			x: this.scene.game.width / 2 - 30,
 			y: this.scene.game.height / 2 + 30,

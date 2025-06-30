@@ -19,9 +19,9 @@ const RANKING_CONFIG = {
 
 	// Player ranking item layout
 	RANK_NUMBER_WIDTH: 50,
-	AVATAR_SIZE: 40,
-	NAME_X_OFFSET: 100,
-	SCORE_X_OFFSET: 300,
+	AVATAR_SIZE: 48,
+	NAME_X_OFFSET: 120,
+	SCORE_X_OFFSET: 500,
 	DETAIL_BUTTON_WIDTH: 120,
 	DETAIL_BUTTON_HEIGHT: 60,
 
@@ -43,6 +43,9 @@ const RANKING_CONFIG = {
 	SLIDE_DURATION: 400,
 	STAGGER_DELAY: 100,
 	INITIAL_DELAY: 600, // Delay before ranking animations start (after scene transition)
+
+	// Scroll constants
+	SCROLLABLE_AREA_HEIGHT: 550, // Height of scrollable area
 } as const;
 
 /**
@@ -58,6 +61,11 @@ export class PlayerRankingE extends g.E {
 	private detailButtons: Map<string, LabelButtonE<string>> = new Map();
 	private rankingItems: g.E[] = [];
 	private animationsStarted: boolean = false;
+	private scrollContainer?: g.Pane;
+	private scrollOffset: number = 0;
+	private maxScrollOffset: number = 0;
+	private lastScrollY: number = 0;
+	private isScrolling: boolean = false;
 
 	constructor(param: {
 		scene: g.Scene;
@@ -68,19 +76,16 @@ export class PlayerRankingE extends g.E {
 			scene: param.scene,
 			width: g.game.width,
 			height: g.game.height,
-			touchable: true
+			opacity: 0, // Start hidden to prevent flash
 		});
 
 		this.gameContext = param.gameContext;
 		this.pointManager = param.pointManager;
 		this.rankedPlayers = [];
 
-		// Start hidden to prevent flash
-		this.opacity = 0;
-		this.touchable = false;
-
 		this.setupBackground();
 		this.setupHeader();
+		this.setupScrollableContainer();
 		this.initializeRanking();
 	}
 
@@ -90,7 +95,6 @@ export class PlayerRankingE extends g.E {
 	override show(): void {
 		// Don't immediately set opacity to 1 - this causes flashing
 		// Instead, animate the opacity smoothly to avoid visual artifacts
-		this.touchable = true;
 
 		// Start entrance animations only once
 		if (!this.animationsStarted) {
@@ -111,7 +115,6 @@ export class PlayerRankingE extends g.E {
 	 */
 	override hide(): void {
 		this.opacity = 0;
-		this.touchable = false;
 		this.closePlayerDetail();
 		super.hide();
 	}
@@ -166,6 +169,94 @@ export class PlayerRankingE extends g.E {
 	}
 
 	/**
+	 * Sets up scrollable container for ranking content
+	 */
+	private setupScrollableContainer(): void {
+		const containerHeight = Math.min(RANKING_CONFIG.SCROLLABLE_AREA_HEIGHT, this.height - RANKING_CONFIG.CONTENT_Y_OFFSET - 20);
+
+		this.scrollContainer = new g.Pane({
+			scene: this.scene,
+			width: this.width,
+			height: containerHeight,
+			x: 0,
+			y: RANKING_CONFIG.CONTENT_Y_OFFSET,
+			touchable: true,
+			local: true
+		});
+
+		// Add scroll event handling
+		this.scrollContainer.onPointDown.add((ev) => this.handleScrollStart(ev));
+		this.scrollContainer.onPointMove.add((ev) => this.handleScrollMove(ev));
+		this.scrollContainer.onPointUp.add((ev) => this.handleScrollEnd(ev));
+
+		this.append(this.scrollContainer);
+	}
+
+	/**
+	 * Handles scroll start
+	 */
+	private handleScrollStart(ev: g.PointDownEvent): void {
+		this.isScrolling = true;
+		this.lastScrollY = this.scrollOffset;
+	}
+
+	/**
+	 * Handles scroll movement
+	 */
+	private handleScrollMove(ev: g.PointMoveEvent): void {
+		if (!this.isScrolling || !this.scrollContainer) {
+			return;
+		}
+
+		const oldScrollOffset = this.scrollOffset;
+		const newScrollOffset = this.lastScrollY + ev.startDelta.y;
+
+		// Clamp scroll offset (negative values scroll down, positive scroll up)
+		const clampedScrollOffset = Math.max(-this.maxScrollOffset, Math.min(newScrollOffset, 0));
+
+		// Round scroll offset to prevent micro-movements
+		const roundedScrollOffset = Math.round(clampedScrollOffset);
+
+		// Only update if scroll offset actually changed significantly
+		if (Math.abs(oldScrollOffset - roundedScrollOffset) < 1) {
+			return;
+		}
+
+		// Update scroll offset
+		this.scrollOffset = roundedScrollOffset;
+
+		// Update all ranking items position based on scroll offset
+		this.rankingItems.forEach((item, index) => {
+			const oldY = item.y;
+			const newY = index * (RANKING_CONFIG.RANK_ITEM_HEIGHT + RANKING_CONFIG.RANK_ITEM_SPACING) + this.scrollOffset;
+
+			// Only update if position actually changed
+			if (Math.abs(oldY - newY) >= 1) {
+				item.y = newY;
+				item.modified();
+			}
+		});
+	}
+
+	/**
+	 * Handles scroll end
+	 */
+	private handleScrollEnd(ev: g.PointUpEvent): void {
+		this.isScrolling = false;
+	}
+
+	/**
+	 * Updates the maximum scroll offset based on current content
+	 */
+	private updateMaxScrollOffset(): void {
+		if (!this.scrollContainer) return;
+
+		const totalContentHeight = this.rankingItems.length * (RANKING_CONFIG.RANK_ITEM_HEIGHT + RANKING_CONFIG.RANK_ITEM_SPACING);
+		const containerHeight = this.scrollContainer.height;
+		this.maxScrollOffset = Math.max(0, totalContentHeight - containerHeight);
+	}
+
+	/**
 	 * Sets up header
 	 */
 	private setupHeader(): void {
@@ -182,44 +273,15 @@ export class PlayerRankingE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 40,
 				fontColor: "white"
 			}),
 			x: 20,
-			y: 10
-		});
-
-		const subtitle = new g.Label({
-			scene: this.scene,
-			text: "ポイ活ウォーズ結果発表",
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 16,
-				fontColor: "white"
-			}),
-			x: 20,
-			y: 35
-		});
-
-		// Calculate game statistics
-		const gameStats = this.calculateGameStatistics();
-		const statsText = new g.Label({
-			scene: this.scene,
-			text: `達成タスク: ${gameStats.totalTasks}個`,
-			font: new g.DynamicFont({
-				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 14,
-				fontColor: "white"
-			}),
-			x: 20,
-			y: 58
+			y: header.height / 2,
+			anchorY: 0.5
 		});
 
 		header.append(title);
-		header.append(subtitle);
-		header.append(statsText);
 		this.append(header);
 	}
 
@@ -230,21 +292,29 @@ export class PlayerRankingE extends g.E {
 		for (let i = 0; i < this.rankedPlayers.length; i++) {
 			const player = this.rankedPlayers[i];
 			const rank = i + 1;
-			const yPosition = RANKING_CONFIG.CONTENT_Y_OFFSET + (i * (RANKING_CONFIG.RANK_ITEM_HEIGHT + RANKING_CONFIG.RANK_ITEM_SPACING));
+			const yPosition = i * (RANKING_CONFIG.RANK_ITEM_HEIGHT + RANKING_CONFIG.RANK_ITEM_SPACING);
 
 			const rankItem = this.createRankingItem(player, rank, yPosition, i);
 			this.rankingItems.push(rankItem);
-			this.append(rankItem);
+			if (this.scrollContainer) {
+				this.scrollContainer.append(rankItem);
+			}
 		}
+
+		// Update max scroll offset after creating all items
+		this.updateMaxScrollOffset();
 	}
 
 	/**
 	 * Creates a single ranking item
 	 */
 	private createRankingItem(player: PlayerData, rank: number, yPosition: number, index: number): g.E {
+		const containerWidth = this.scrollContainer
+			? this.scrollContainer.width - (RANKING_CONFIG.CONTENT_MARGIN * 2)
+			: this.width - (RANKING_CONFIG.CONTENT_MARGIN * 2);
 		const container = new g.E({
 			scene: this.scene,
-			width: this.width - (RANKING_CONFIG.CONTENT_MARGIN * 2),
+			width: containerWidth,
 			height: RANKING_CONFIG.RANK_ITEM_HEIGHT,
 			x: RANKING_CONFIG.CONTENT_MARGIN,
 			y: yPosition
@@ -258,17 +328,17 @@ export class PlayerRankingE extends g.E {
 		const borderColor = isCurrentPlayer ? RANKING_CONFIG.SELF_BORDER_COLOR : RANKING_CONFIG.RANK_BORDER_COLOR;
 		const border = new g.FilledRect({
 			scene: this.scene,
-			width: container.width + (borderWidth * 2),
-			height: container.height + (borderWidth * 2),
-			x: -borderWidth,
-			y: -borderWidth,
+			width: container.width,
+			height: container.height,
 			cssColor: borderColor
 		});
 
 		const background = new g.FilledRect({
 			scene: this.scene,
-			width: container.width,
-			height: container.height,
+			x: borderWidth,
+			y: borderWidth,
+			width: container.width - (borderWidth * 2),
+			height: container.height - (borderWidth * 2),
 			cssColor: RANKING_CONFIG.RANK_ITEM_COLOR
 		});
 
@@ -283,22 +353,39 @@ export class PlayerRankingE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 32,
 				fontColor: rankColor
 			}),
 			x: 15,
-			y: 15
+			y: container.height / 2,
+			anchorY: 0.5
 		});
 		container.append(rankLabel);
 
 		// Player avatar (simplified as colored circle)
-		const avatar = new g.FilledRect({
+		const avatarBackground = new g.FilledRect({
 			scene: this.scene,
 			width: RANKING_CONFIG.AVATAR_SIZE,
 			height: RANKING_CONFIG.AVATAR_SIZE,
 			x: RANKING_CONFIG.RANK_NUMBER_WIDTH,
-			y: 10,
-			cssColor: "#3498db" // Default avatar color
+			y: container.height / 2,
+			anchorY: 0.5,
+			cssColor: isCurrentPlayer ? "#ffe082" : "#95a5a6", // Amber for self-posted, gray for others
+		});
+		container.append(avatarBackground);
+
+		const avatar = new g.Label({
+			scene: this.scene,
+			font: new g.DynamicFont({
+				game: this.scene.game,
+				fontFamily: "sans-serif",
+				size: 28,
+			}),
+			text: player.profile.avatar || "😀", // Default avatar if undefined
+			x: avatarBackground.x + avatarBackground.width / 2,
+			y: container.height / 2,
+			anchorX: 0.5,
+			anchorY: 0.5
 		});
 		container.append(avatar);
 
@@ -310,12 +397,13 @@ export class PlayerRankingE extends g.E {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 18,
+				size: 32,
 				fontColor: RANKING_CONFIG.RANK_TEXT_COLOR,
 				fontWeight: isCurrentPlayer ? "bold" : "normal"
 			}),
 			x: RANKING_CONFIG.NAME_X_OFFSET,
-			y: 20
+			y: container.height / 2,
+			anchorY: 0.5
 		});
 		// Adjust name width to fit between NAME_X_OFFSET and SCORE_X_OFFSET
 		const maxNameWidth = RANKING_CONFIG.SCORE_X_OFFSET - RANKING_CONFIG.NAME_X_OFFSET - 10;
@@ -323,17 +411,21 @@ export class PlayerRankingE extends g.E {
 		container.append(nameLabel);
 
 		// Player score
+		const formatPoints = player.points.toLocaleString();
+		const rightPositionPoints = formatPoints.length <= 6 ?
+			(new Array(6).fill(" ").join("") + formatPoints).slice(-6) : formatPoints;
 		const scoreLabel = new g.Label({
 			scene: this.scene,
-			text: `${player.points}pt`,
+			text: `${rightPositionPoints}pt`,
 			font: new g.DynamicFont({
 				game: this.scene.game,
-				fontFamily: "sans-serif",
-				size: 18,
+				fontFamily: "monospace",
+				size: 32,
 				fontColor: RANKING_CONFIG.SCORE_COLOR
 			}),
 			x: RANKING_CONFIG.SCORE_X_OFFSET,
-			y: 20
+			y: container.height / 2,
+			anchorY: 0.5
 		});
 		container.append(scoreLabel);
 
@@ -361,6 +453,7 @@ export class PlayerRankingE extends g.E {
 		// Set initial state - hidden
 		container.opacity = 0;
 		container.x += 50;
+		container.modified();
 
 		return container;
 	}
@@ -458,4 +551,5 @@ export class PlayerRankingE extends g.E {
 
 		return { totalTasks, totalItems };
 	}
+
 }

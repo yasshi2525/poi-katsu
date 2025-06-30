@@ -5,10 +5,11 @@ import {
 	SetInfo,
 	calculateSetInfo,
 	calculateTotalSettlementValue,
-	groupItemsByCategory,
 	getItemCategoryInfo
 } from "../data/itemData";
+import { createSettlementNotification } from "../data/notificationData";
 import { ItemManager } from "../manager/itemManager";
+import { NotificationManager } from "../manager/notificationManager";
 import { PointManager } from "../manager/pointManager";
 import { ItemConversionE } from "./itemConversionE";
 import { ModalE } from "./modalE";
@@ -25,7 +26,7 @@ const SETTLEMENT_CONFIG = {
 	BOTTOM_MARGIN: 200,
 
 	// Category layout
-	CATEGORY_SPACING: 350,
+	CATEGORY_SPACING: 550,
 	ITEM_SPACING: 60,
 	BUTTON_Y_OFFSET: 200,
 
@@ -44,12 +45,11 @@ const SETTLEMENT_CONFIG = {
 
 	// Animation constants
 	FADE_IN_DURATION: 300,
-	SLIDE_DURATION: 400,
+	SLIDE_DURATION: 500,
 
 	// Timing constants
 	CONVERSION_DISPLAY_DELAY: 2000, // Delay to let user see conversion details
 	RESULT_DISPLAY_DELAY: 1500, // Delay to let user see content before final result
-	RANKING_TRANSITION_DELAY: 2000, // Delay before transitioning to ranking
 } as const;
 
 /**
@@ -59,6 +59,7 @@ const SETTLEMENT_CONFIG = {
 export class SettlementE extends g.E {
 	private gameContext: GameContext;
 	private itemManager: ItemManager;
+	private notificationManager: NotificationManager;
 	private ownedItems: OwnedItem[];
 	private setInfos: SetInfo[];
 	private currentModal: ModalE<string> | null = null;
@@ -70,17 +71,18 @@ export class SettlementE extends g.E {
 		scene: g.Scene;
 		gameContext: GameContext;
 		itemManager: ItemManager;
+		notificationManager: NotificationManager;
 		pointManager: PointManager;
 	}) {
 		super({
 			scene: param.scene,
 			width: g.game.width,
-			height: g.game.height,
-			touchable: true
+			height: g.game.height
 		});
 
 		this.gameContext = param.gameContext;
 		this.itemManager = param.itemManager;
+		this.notificationManager = param.notificationManager;
 		this.ownedItems = [];
 		this.setInfos = [];
 		this.pointManager = param.pointManager;
@@ -108,12 +110,9 @@ export class SettlementE extends g.E {
 		this.ownedItems = this.itemManager.getOwnedItems();
 		this.setInfos = calculateSetInfo(this.ownedItems, allItems);
 
-		// Group items by category
-		const itemsByCategory = groupItemsByCategory(this.ownedItems);
-
 		// Create conversion displays for each category
 		let categoryIndex = 0;
-		for (const [categoryId] of itemsByCategory) {
+		for (const categoryId of ["novel", "manga"]) {
 			const categoryInfo = getItemCategoryInfo(categoryId as "novel" | "manga");
 			const setInfo = this.setInfos.find(info => info.category === categoryId);
 
@@ -123,7 +122,7 @@ export class SettlementE extends g.E {
 					categoryInfo: categoryInfo,
 					setInfo: setInfo,
 					x: SETTLEMENT_CONFIG.CONTENT_MARGIN + (categoryIndex * SETTLEMENT_CONFIG.CATEGORY_SPACING),
-					y: SETTLEMENT_CONFIG.CONTENT_Y_OFFSET
+					y: SETTLEMENT_CONFIG.CONTENT_Y_OFFSET,
 				});
 
 				this.itemConversions.set(categoryId, conversionE);
@@ -143,14 +142,14 @@ export class SettlementE extends g.E {
 	 */
 	override show(): void {
 		this.opacity = 1;
-		this.touchable = true;
+		this.modified();
 		this.refreshContent();
 		super.show();
 
 		// Always show final score panel after items are displayed
 		this.scene.setTimeout(() => {
 			this.showFinalScorePanel();
-		}, SETTLEMENT_CONFIG.RESULT_DISPLAY_DELAY);
+		}, SETTLEMENT_CONFIG.CONVERSION_DISPLAY_DELAY + SETTLEMENT_CONFIG.RESULT_DISPLAY_DELAY);
 	}
 
 
@@ -159,7 +158,6 @@ export class SettlementE extends g.E {
 	 */
 	override hide(): void {
 		this.opacity = 0;
-		this.touchable = false;
 		this.closeModal();
 		super.hide();
 	}
@@ -211,15 +209,16 @@ export class SettlementE extends g.E {
 
 		const title = new g.Label({
 			scene: this.scene,
-			text: "精算画面",
+			text: "所持アイテムのポイント換金",
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 24,
+				size: 48,
 				fontColor: "white"
 			}),
 			x: 20,
-			y: 25
+			y: SETTLEMENT_CONFIG.HEADER_HEIGHT / 2,
+			anchorY: 0.5
 		});
 
 		header.append(title);
@@ -232,14 +231,31 @@ export class SettlementE extends g.E {
 	private animateConversionEntrance(conversionE: ItemConversionE, index: number): void {
 		conversionE.opacity = 0;
 		conversionE.x += 50;
+		conversionE.modified();
 
 		const timeline = new Timeline(this.scene);
 		timeline.create(conversionE)
-			.wait(index * 100)
+			.wait(SETTLEMENT_CONFIG.SLIDE_DURATION + index * 100)
 			.to({
 				opacity: 1,
 				x: conversionE.x - 50
-			}, SETTLEMENT_CONFIG.FADE_IN_DURATION);
+			}, SETTLEMENT_CONFIG.FADE_IN_DURATION)
+			.wait(2000)
+			.call(() => {
+				const waitText = new g.Label({
+					scene: this.scene,
+					text: "集計中です。しばらくお待ち下さい...",
+					font: new g.DynamicFont({
+						game: this.scene.game,
+						fontFamily: "sans-serif",
+						size: 32,
+					}),
+					x: SETTLEMENT_CONFIG.CONTENT_MARGIN,
+					y: this.height - SETTLEMENT_CONFIG.CONTENT_MARGIN,
+					anchorY: 1
+				});
+				this.append(waitText);
+			});
 	}
 
 	/**
@@ -275,6 +291,8 @@ export class SettlementE extends g.E {
 			// Award settlement points through PointManager to create transaction record (only if positive)
 			if (totalValue > 0) {
 				this.pointManager.awardPoints(totalValue, "settlement", "アイテム精算による獲得ポイント");
+				const notification = createSettlementNotification(totalValue);
+				this.notificationManager.showNotification(notification);
 			} else {
 				// Still broadcast current score even if no settlement points are awarded
 				this.pointManager.broadcastScore();
@@ -288,10 +306,14 @@ export class SettlementE extends g.E {
 				preSettlementItemCount: itemCountBeforeSettlement // Store count before clearing
 			};
 			this.gameContext.updateCurrentPlayer(updatedPlayer);
+
+			// Broadcast transaction details for ranking display after final score is determined
+			this.pointManager.broadcastTransactionDetails();
 		}
 
 		// Show settlement result
-		this.showSettlementResult(totalValue);
+		// NOTE: 当初モーダルを出してサマライズしてたが、内容に意味が薄いのと、結局ランキング画面に出るので表示をやめた
+		// this.showSettlementResult(totalValue);
 	}
 
 	/**

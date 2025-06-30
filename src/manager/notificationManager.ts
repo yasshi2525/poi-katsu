@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/member-ordering */
+import { Timeline } from "@akashic-extension/akashic-timeline";
 import { GameContext } from "../data/gameContext";
 import {
 	NotificationData,
@@ -8,6 +9,7 @@ import {
 	createNotification,
 	markNotificationDisplayed
 } from "../data/notificationData";
+import { adjustLabelWidthToFit } from "../util/labelUtils";
 
 /**
  * Notification queue configuration
@@ -32,6 +34,19 @@ export interface NotificationPosition {
 }
 
 /**
+ * Animation configuration for notifications
+ */
+const NOTIFICATION_ANIMATION_CONFIG = {
+	// Slide-in animation from right
+	SLIDE_IN_DURATION: 300,
+	SLIDE_IN_INITIAL_OFFSET: 500, // Start 100px to the right
+
+	// Fade-out animation
+	FADE_OUT_DURATION: 250,
+	FADE_OUT_TARGET_OPACITY: 0
+} as const;
+
+/**
  * NotificationManager - Centralized notification system
  * Manages notification display, queuing, and timing
  * Implements 1.2 ゲーム進行管理システム according to plan.md
@@ -51,8 +66,8 @@ export class NotificationManager {
 		this.scene = scene;
 		this.config = {
 			maxQueueSize: 10,
-			maxSimultaneousDisplay: 3,
-			defaultDisplayDuration: 3000,
+			maxSimultaneousDisplay: 5,
+			defaultDisplayDuration: 5000,
 			...config
 		};
 
@@ -78,15 +93,15 @@ export class NotificationManager {
 	 */
 	private initializeDisplayPositions(): NotificationPosition[] {
 		const positions: NotificationPosition[] = [];
-		const notificationHeight = 60;
+		const notificationHeight = 80;
 		const spacing = 10;
-		const startY = 100; // Below header
+		const startY = 69 * 2 + spacing; // Below header
 
 		for (let i = 0; i < this.config.maxSimultaneousDisplay; i++) {
 			positions.push({
-				x: this.scene.game.width - 320, // Right side
+				x: this.scene.game.width - 500, // Right side
 				y: startY + (i * (notificationHeight + spacing)),
-				width: 300,
+				width: 500,
 				height: notificationHeight
 			});
 		}
@@ -285,11 +300,16 @@ export class NotificationManager {
 	private createNotificationElement(notification: NotificationData, position: NotificationPosition): g.E {
 		const container = new g.E({
 			scene: this.scene,
-			x: position.x,
+			x: position.x + NOTIFICATION_ANIMATION_CONFIG.SLIDE_IN_INITIAL_OFFSET, // Start from right
 			y: position.y,
 			width: position.width,
 			height: position.height
 		});
+
+		// Slide-in animation from right
+		const timeline = new Timeline(this.scene);
+		timeline.create(container)
+			.to({ x: position.x }, NOTIFICATION_ANIMATION_CONFIG.SLIDE_IN_DURATION);
 
 		// Background
 		const background = new g.FilledRect({
@@ -297,7 +317,9 @@ export class NotificationManager {
 			width: position.width,
 			height: position.height,
 			cssColor: this.getNotificationColor(notification.priority),
-			opacity: 0.9
+			opacity: 0.9,
+			touchable: false, // touchable will be set later if needed
+			local: true
 		});
 		container.append(background);
 
@@ -308,7 +330,7 @@ export class NotificationManager {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 20
+					size: 32
 				}),
 				text: notification.icon,
 				x: 10,
@@ -323,13 +345,14 @@ export class NotificationManager {
 			font: new g.DynamicFont({
 				game: this.scene.game,
 				fontFamily: "sans-serif",
-				size: 14,
+				size: 24,
 				fontColor: "white"
 			}),
-			text: this.truncateText(notification.message, 30),
-			x: notification.icon ? 40 : 10,
+			text: notification.message,
+			x: notification.icon ? 55 : 10,
 			y: 10
 		});
+		adjustLabelWidthToFit(messageLabel, container.width - (notification.icon ? 65 : 20));
 		container.append(messageLabel);
 
 		// Description (if present and space available)
@@ -339,31 +362,15 @@ export class NotificationManager {
 				font: new g.DynamicFont({
 					game: this.scene.game,
 					fontFamily: "sans-serif",
-					size: 12,
-					fontColor: "#cccccc"
+					size: 21,
+					fontColor: "#dedede"
 				}),
-				text: this.truncateText(notification.description, 35),
-				x: notification.icon ? 40 : 10,
-				y: 30
+				text: notification.description,
+				x: notification.icon ? 55 : 10,
+				y: 40
 			});
+			adjustLabelWidthToFit(descLabel, container.width - (notification.icon ? 65 : 20));
 			container.append(descLabel);
-		}
-
-		// Points display (if present)
-		if (notification.points) {
-			const pointsLabel = new g.Label({
-				scene: this.scene,
-				font: new g.DynamicFont({
-					game: this.scene.game,
-					fontFamily: "sans-serif",
-					size: 12,
-					fontColor: "#ffdd00"
-				}),
-				text: `+${notification.points}pt`,
-				x: position.width - 60,
-				y: 35
-			});
-			container.append(pointsLabel);
 		}
 
 		// Click to dismiss (unless auto-dismiss is 0)
@@ -383,14 +390,22 @@ export class NotificationManager {
 	private removeNotificationDisplay(notificationId: string): void {
 		const element = this.notificationElements.get(notificationId);
 		if (element) {
-			element.destroy();
-			this.notificationElements.delete(notificationId);
+			// Fade-out animation before removal
+			const timeline = new Timeline(this.scene);
+			timeline.create(element)
+				.to({ opacity: NOTIFICATION_ANIMATION_CONFIG.FADE_OUT_TARGET_OPACITY }, NOTIFICATION_ANIMATION_CONFIG.FADE_OUT_DURATION)
+				.call(() => {
+					element.destroy();
+					this.notificationElements.delete(notificationId);
+					this.displayedNotifications.delete(notificationId);
+
+					// Process next queued notification
+					this.processNextQueuedNotification();
+				});
+		} else {
+			this.displayedNotifications.delete(notificationId);
+			this.processNextQueuedNotification();
 		}
-
-		this.displayedNotifications.delete(notificationId);
-
-		// Process next queued notification
-		this.processNextQueuedNotification();
 	}
 
 	/**
@@ -434,14 +449,6 @@ export class NotificationManager {
 	}
 
 	/**
-	 * Truncates text to fit notification display
-	 */
-	private truncateText(text: string, maxLength: number): string {
-		if (text.length <= maxLength) return text;
-		return text.substring(0, maxLength - 3) + "...";
-	}
-
-	/**
 	 * Finds the insertion index for a notification based on priority
 	 */
 	private findInsertionIndex(notification: NotificationData): number {
@@ -481,18 +488,30 @@ export class NotificationManager {
 	 * Clears all notification displays
 	 */
 	private clearAllDisplays(): void {
-		for (const element of this.notificationElements.values()) {
-			element.destroy();
+		const elements = Array.from(this.notificationElements.values());
+		const timeline = new Timeline(this.scene);
+
+		// Fade out all notifications simultaneously
+		for (const element of elements) {
+			timeline.create(element)
+				.to({ opacity: NOTIFICATION_ANIMATION_CONFIG.FADE_OUT_TARGET_OPACITY }, NOTIFICATION_ANIMATION_CONFIG.FADE_OUT_DURATION);
 		}
 
-		this.displayedNotifications.clear();
-		this.notificationElements.clear();
-		this.queuedNotifications.length = 0;
+		// Clean up after animation completes
+		this.scene.setTimeout(() => {
+			for (const element of elements) {
+				element.destroy();
+			}
 
-		// Clear delayed notifications
-		for (const { timerId } of this.delayedNotifications.values()) {
-			this.scene.clearTimeout(timerId);
-		}
-		this.delayedNotifications.clear();
+			this.displayedNotifications.clear();
+			this.notificationElements.clear();
+			this.queuedNotifications.length = 0;
+
+			// Clear delayed notifications
+			for (const { timerId } of this.delayedNotifications.values()) {
+				this.scene.clearTimeout(timerId);
+			}
+			this.delayedNotifications.clear();
+		}, NOTIFICATION_ANIMATION_CONFIG.FADE_OUT_DURATION);
 	}
 }

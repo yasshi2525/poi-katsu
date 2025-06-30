@@ -49,6 +49,7 @@ interface SettlementStat {
 /**
  * Settlement result display entity
  * Shows detailed breakdown of settlement calculation
+ * NOTE: 当初作ったが、効果が薄かったため現在未使用
  */
 export class SettlementResultE extends g.E {
 	private totalValue: number;
@@ -66,8 +67,7 @@ export class SettlementResultE extends g.E {
 		super({
 			scene: param.scene,
 			width: g.game.width,
-			height: g.game.height,
-			touchable: true
+			height: g.game.height
 		});
 
 		this.totalValue = param.totalValue;
@@ -102,7 +102,8 @@ export class SettlementResultE extends g.E {
 			width: this.width,
 			height: this.height,
 			cssColor: "rgba(0, 0, 0, 0.6)",
-			touchable: true
+			touchable: true,
+			local: true
 		});
 
 		// Prevent clicks from passing through
@@ -247,6 +248,7 @@ export class SettlementResultE extends g.E {
 
 		// Animate line entrance
 		container.opacity = 0;
+		container.modified();
 		const timeline = new Timeline(this.scene);
 		timeline.create(container)
 			.wait(RESULT_CONFIG.STAGGER_DELAY * index)
@@ -324,6 +326,7 @@ export class SettlementResultE extends g.E {
 
 				// Animate statistics entrance
 				text.opacity = 0;
+				text.modified();
 				const timeline = new Timeline(this.scene);
 				timeline.create(text)
 					.wait(RESULT_CONFIG.STAGGER_DELAY * index)
@@ -368,6 +371,7 @@ export class SettlementResultE extends g.E {
 		totalLabel.opacity = 0;
 		totalLabel.scaleX = 0.8;
 		totalLabel.scaleY = 0.8;
+		totalLabel.modified();
 
 		const timeline = new Timeline(this.scene);
 		timeline.create(totalLabel)
@@ -415,6 +419,8 @@ export class SettlementResultE extends g.E {
 		modal.scaleY = 0.8;
 		border.scaleX = 0.8;
 		border.scaleY = 0.8;
+		modal.modified();
+		border.modified();
 
 		const timeline = new Timeline(this.scene);
 		timeline.create(modal)

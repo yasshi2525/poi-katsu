@@ -283,6 +283,11 @@
 			"type": "script",
 			"path": "script/manager/interactionBlockerManager.js",
 			"global": true
+		},
+		"affiliatePurchaseBot": {
+			"type": "script",
+			"path": "script/manager/affiliatePurchaseBot.js",
+			"global": true
 		}
 	},
 	"environment": {
